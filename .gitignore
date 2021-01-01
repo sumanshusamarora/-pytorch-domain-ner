@@ -1,0 +1,6 @@
+models/
+data/
+artifacts/
+ner_model/
+.word_vectors_cache/
+__pycache__/
