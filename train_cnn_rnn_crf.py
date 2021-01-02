@@ -633,7 +633,7 @@ class ClassificationModelUtils:
         for epoch in range(num_epochs):
             self.crf_weights = []
             print(
-                f"\n\n------------------------- Epoch - {epoch + 1} -------------------------"
+                f"\n\n------------------------- Epoch - {epoch + 1} of {num_epochs} -------------------------"
             )
             batch_losses = []
             batch_ner_accuracy = []
@@ -901,7 +901,6 @@ if __name__ == "__main__":
         X_tags, tag_to_index = get_POS_tags(X_text_list)
         with open(os.path.join(ARTIFACTS_DIR, "tag_to_index"), "wb") as inf:
             dill.dump(tag_to_index, inf)
-            mlflow.log_artifact(inf.name)
 
         POSTAG_EMBED_DIM = max(tag_to_index.values()) + 1
         mlflow.log_param("POSTAG_EMBED_DIM", POSTAG_EMBED_DIM)
@@ -1012,7 +1011,6 @@ if __name__ == "__main__":
 
         with open(os.path.join(ARTIFACTS_DIR, "x_encoder"), "wb") as inf:
             dill.dump(x_encoder, inf)
-            mlflow.log_artifact(inf.name)
 
         if vectors is not None:
             x_embed_weights = torch.stack([vectors[word] for word in x_encoder.vocab])
@@ -1034,7 +1032,6 @@ if __name__ == "__main__":
 
         with open(os.path.join(ARTIFACTS_DIR, "x_char_encoder"), "wb") as inf:
             dill.dump(x_char_encoder, inf)
-            mlflow.log_artifact(inf.name)
 
         # Tokenize Pos tags
         x_postag_padded_train = tokenize_pos_tags(
@@ -1050,7 +1047,8 @@ if __name__ == "__main__":
         )
         with open(os.path.join(ARTIFACTS_DIR, "y_ner_encoder"), "wb") as inf:
             dill.dump(y_ner_encoder, inf)
-            mlflow.log_artifact(inf.name)
+
+        mlflow.log_artifacts("artifacts", artifact_path="files")
 
         # Create train dataloader
         dataset_train = Dataset(
