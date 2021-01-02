@@ -1,6 +1,6 @@
 import torch
 import mlflow.pytorch
-from train_no_binary import (
+from train_cnn_rnn_crf import (
     load_data,
     get_POS_tags,
     trim_list_of_lists_upto_max_len,
