@@ -1,0 +1,1 @@
+This is a bad model since RNN_HIDDEN_SIZE was mistakenly input as 32 which is way too less so i dont expect great results. However letting this run fully to see the impact.

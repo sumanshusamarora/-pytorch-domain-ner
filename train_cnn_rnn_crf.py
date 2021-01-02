@@ -843,7 +843,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--rnn-hidden-size",
         dest="RNN_HIDDEN_SIZE",
-        default=32,
+        default=512,
         type=int,
         help="Word embedding dimension. Ignore if providing a pre-trained word embedding",
     )
@@ -883,10 +883,10 @@ if __name__ == "__main__":
         mlflow.log_param("WORD_EMBED_FREEZE", args.WORD_EMBED_FREEZE)
         commit_id = git_commit_push(commit_message=args.COMMENT)
         mlflow.log_param("COMMIT ID", commit_id)
-        ARTIFACTS_DIR = os.path.join(os.path.dirname(__file__), "artifacts", commit_id)
-        if not os.path.exists(ARTIFACTS_DIR):
-            os.makedirs(ARTIFACTS_DIR)
-        mlflow.log_param("ARTIFACTS_DIR", ARTIFACTS_DIR)
+        ARTIFACTS_DIR = os.path.join(os.path.dirname(__file__), "artifacts") #, commit_id)
+        #if not os.path.exists(ARTIFACTS_DIR):
+        #    os.makedirs(ARTIFACTS_DIR)
+        #mlflow.log_param("ARTIFACTS_DIR", ARTIFACTS_DIR)
         mlflow.log_param("WORD_EMBED_CACHE_PATH", args.WORD_EMBED_CACHE_PATH)
 
         if os.path.exists(args.WORD_EMBED_CACHE_PATH):
