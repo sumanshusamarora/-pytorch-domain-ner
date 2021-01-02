@@ -6,7 +6,7 @@ from train_no_binary import (
     trim_list_of_lists_upto_max_len,
     tokenize_pos_tags,
     pad_and_stack_list_of_list,
-    enrich_data
+    enrich_data,
 )
 import dill
 from torchnlp.encoders.text import pad_tensor
@@ -16,7 +16,52 @@ from torch.utils.data import DataLoader
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 MAX_SENTENCE_LEN = 800
-test_index = [4, 205, 15, 23, 217, 187, 200, 98, 143, 80, 213, 69, 55, 181, 22, 83, 202, 166, 30, 53, 199, 142, 89, 31, 138, 19, 142, 76, 122, 79, 29, 182, 23, 194, 23, 108, 1, 54, 110, 218, 196, 200, 163, 140]
+test_index = [
+    4,
+    205,
+    15,
+    23,
+    217,
+    187,
+    200,
+    98,
+    143,
+    80,
+    213,
+    69,
+    55,
+    181,
+    22,
+    83,
+    202,
+    166,
+    30,
+    53,
+    199,
+    142,
+    89,
+    31,
+    138,
+    19,
+    142,
+    76,
+    122,
+    79,
+    29,
+    182,
+    23,
+    194,
+    23,
+    108,
+    1,
+    54,
+    110,
+    218,
+    196,
+    200,
+    163,
+    140,
+]
 MAX_WORD_LENGTH = 307
 RUN_ID = "83a77c6d613c436e9ad427009b2dacff"
 
@@ -53,22 +98,52 @@ X_tags = trim_list_of_lists_upto_max_len(X_tags, MAX_SENTENCE_LEN)
 
 alnum, numeric, alpha, digit, lower, title, ascii = enrich_data(X_text_list_as_is)
 
-alnum = pad_and_stack_list_of_list(alnum, max_sentence_len=MAX_SENTENCE_LEN, pad_value=-1,
-                                   tensor_type=torch.FloatTensor)
-numeric = pad_and_stack_list_of_list(numeric, max_sentence_len=MAX_SENTENCE_LEN, pad_value=-1,
-                                    tensor_type=torch.FloatTensor)
-alpha = pad_and_stack_list_of_list(alpha, max_sentence_len=MAX_SENTENCE_LEN, pad_value=-1,
-                                   tensor_type=torch.FloatTensor)
-digit = pad_and_stack_list_of_list(digit, max_sentence_len=MAX_SENTENCE_LEN, pad_value=-1,
-                                   tensor_type=torch.FloatTensor)
-lower = pad_and_stack_list_of_list(lower, max_sentence_len=MAX_SENTENCE_LEN, pad_value=-1,
-                                   tensor_type=torch.FloatTensor)
-title = pad_and_stack_list_of_list(title, max_sentence_len=MAX_SENTENCE_LEN, pad_value=-1,
-                                   tensor_type=torch.FloatTensor)
-ascii = pad_and_stack_list_of_list(ascii, max_sentence_len=MAX_SENTENCE_LEN, pad_value=-1,
-                                   tensor_type=torch.FloatTensor)
+alnum = pad_and_stack_list_of_list(
+    alnum,
+    max_sentence_len=MAX_SENTENCE_LEN,
+    pad_value=-1,
+    tensor_type=torch.FloatTensor,
+)
+numeric = pad_and_stack_list_of_list(
+    numeric,
+    max_sentence_len=MAX_SENTENCE_LEN,
+    pad_value=-1,
+    tensor_type=torch.FloatTensor,
+)
+alpha = pad_and_stack_list_of_list(
+    alpha,
+    max_sentence_len=MAX_SENTENCE_LEN,
+    pad_value=-1,
+    tensor_type=torch.FloatTensor,
+)
+digit = pad_and_stack_list_of_list(
+    digit,
+    max_sentence_len=MAX_SENTENCE_LEN,
+    pad_value=-1,
+    tensor_type=torch.FloatTensor,
+)
+lower = pad_and_stack_list_of_list(
+    lower,
+    max_sentence_len=MAX_SENTENCE_LEN,
+    pad_value=-1,
+    tensor_type=torch.FloatTensor,
+)
+title = pad_and_stack_list_of_list(
+    title,
+    max_sentence_len=MAX_SENTENCE_LEN,
+    pad_value=-1,
+    tensor_type=torch.FloatTensor,
+)
+ascii = pad_and_stack_list_of_list(
+    ascii,
+    max_sentence_len=MAX_SENTENCE_LEN,
+    pad_value=-1,
+    tensor_type=torch.FloatTensor,
+)
 
-x_enriched_features = torch.stack((alnum, numeric, alpha, digit, lower, title, ascii), dim=2)
+x_enriched_features = torch.stack(
+    (alnum, numeric, alpha, digit, lower, title, ascii), dim=2
+)
 
 
 x_encoded = [x_encoder.encode(text) for text in X_text_list]

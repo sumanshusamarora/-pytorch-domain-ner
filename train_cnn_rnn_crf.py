@@ -35,7 +35,6 @@ home = str(Path.home())
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-
 def load_data(fpath="data/data_ready_list.pkl"):
     with open(fpath, "rb") as in_file:
         dataset_ready = pickle.load(in_file)
@@ -64,7 +63,12 @@ def get_POS_tags(X_text_list):
 
 
 def split_test_train(
-    X_text_list, X_text_list_as_is, X_tags, x_enriched_features, y_ner_list, split_size=0.3
+    X_text_list,
+    X_text_list_as_is,
+    X_tags,
+    x_enriched_features,
+    y_ner_list,
+    split_size=0.3,
 ):
     test_index = random.choices(
         range(len(X_text_list)), k=int(split_size * len(X_text_list))
@@ -144,7 +148,6 @@ def tokenize_character(X_text_list_train, X_text_list_test, MAX_SENTENCE_LEN):
         [x_char_encoder.encode(char) for char in word] for word in X_text_list_test
     ]
 
-
     MAX_WORD_LENGTH = max(
         [
             max([internal.shape[0] for internal in external])
@@ -217,7 +220,8 @@ def encode_ner_y(y_ner_list_train, y_ner_list_test, CLASS_COUNT_DICT, MAX_SENTEN
 
     return y_ner_encoder, y_ner_padded_train, y_ner_padded_test
 
-def enrich_data(txt_list:list):
+
+def enrich_data(txt_list: list):
     alnum = []
     numeric = []
     alpha = []
@@ -237,7 +241,6 @@ def enrich_data(txt_list:list):
     return alnum, numeric, alpha, digit, lower, title, ascii
 
 
-
 # Sample weights
 def calculate_sample_weights(y_ner_padded_train):
     ner_class_weights = compute_class_weight(
@@ -249,11 +252,15 @@ def calculate_sample_weights(y_ner_padded_train):
     return ner_class_weights
 
 
-def pad_and_stack_list_of_list(list_of_list:list, max_sentence_len=800, pad_value=0, tensor_type=torch.FloatTensor):
-    padded = [pad_tensor(tensor_type(lst), length=max_sentence_len, padding_index=pad_value) for lst in list_of_list]
+def pad_and_stack_list_of_list(
+    list_of_list: list, max_sentence_len=800, pad_value=0, tensor_type=torch.FloatTensor
+):
+    padded = [
+        pad_tensor(tensor_type(lst), length=max_sentence_len, padding_index=pad_value)
+        for lst in list_of_list
+    ]
     stacked = torch.stack(padded)
     return stacked
-
 
 
 # Model defintion
@@ -322,7 +329,10 @@ class EntityExtraction(nn.Module):
 
         # LSTM for concatenated input
         self.lstm_ner = nn.LSTM(
-            input_size=self.word_embed_dim + self.tag_embed_dim + self.char_cnn_out_dim + self.enrich_dim,
+            input_size=self.word_embed_dim
+            + self.tag_embed_dim
+            + self.char_cnn_out_dim
+            + self.enrich_dim,
             hidden_size=self.rnn_hidden_size,
             num_layers=self.rnn_stack_size,
             batch_first=True,
@@ -424,9 +434,11 @@ class ClassificationModelUtils:
         cuda=True,
         dropout=0.3,
         rnn_stack_size=2,
+        rnn_hidden_size=512,
         learning_rate=0.001,
         word_embed_dim=256,
         postag_embed_dim=36,
+        char_cnn_out_dim=32,
         enrich_dim=7,
         word_embedding_weights=None,
         word_embedding_freeze=True,
@@ -449,10 +461,12 @@ class ClassificationModelUtils:
             num_classes=NUM_CLASSES,
             dropout_ratio=dropout,
             rnn_stack_size=rnn_stack_size,
+            rnn_hidden_size=rnn_hidden_size,
             word_embed_dim=word_embed_dim,
             class_weights=self.ner_class_weights,
             tag_embed_dim=postag_embed_dim,
             enrich_dim=enrich_dim,
+            char_cnn_out_dim=char_cnn_out_dim,
             word_embedding_weights=word_embedding_weights,
             word_embedding_freeze=word_embedding_freeze,
         )
@@ -638,7 +652,9 @@ class ClassificationModelUtils:
                 data["x_padded"] = data["x_padded"].to(self.device)
                 data["x_char_padded"] = data["x_char_padded"].to(self.device)
                 data["x_postag_padded"] = data["x_postag_padded"].to(self.device)
-                data["x_enriched_features"] = data["x_enriched_features"].to(self.device)
+                data["x_enriched_features"] = data["x_enriched_features"].to(
+                    self.device
+                )
                 data["y_ner_padded"] = data["y_ner_padded"].to(self.device)
 
                 mask = torch.where(
@@ -721,45 +737,126 @@ class ClassificationModelUtils:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Get Input Values')
-    parser.add_argument('--data-path', dest="DATA_PATH", default=None, type=str,
-                        help='Data file path - pickle format')
-    parser.add_argument('--comment', dest="COMMENT", default=f'Training model at UTC: {datetime.utcnow()}', type=str,
-                     help='Any comment about training step')
-    parser.add_argument('--exp-name', dest="EXPERIMENT_NAME", default="PytorchDualLoss", type=str,
-                        help='MLFLOW Experiment Name')
-    parser.add_argument('--fw', dest="FRAMEWORK", default="Pytorch", type=str,
-                        help='Framework name')
-    parser.add_argument('--epochs', dest="EPOCHS", default=35, type=int,
-                        help='Number of epochs to run')
-    parser.add_argument('--dropout', dest="DROPOUT", default=0.5, type=float,
-                        help='Dropout to apply')
-    parser.add_argument('--rnn_stack_size', dest="RNN_STACK_SIZE", default=1, type=int,
-                        help='Number of LSTM layers to stack')
-    parser.add_argument('--max-sen-len', dest="MAX_SENTENCE_LEN", default=800, type=int,
-                        help='Max Senetence Length')
-    parser.add_argument('--max-word-len', dest="MAX_WORD_LEN", default=0, type=int,
-                        help='Max Word Length')
-    parser.add_argument('--lr', dest="LEARNING_RATE", default=0.001, type=float,
-                        help='Learning Rate')
-    parser.add_argument('--split-size', dest="TEST_SPLIT", default=0.2, type=float,
-                        help='Test Split Size')
-    parser.add_argument('--gpu', dest="GPU", default=True, type=bool,
-                        help='Use GPU')
-    parser.add_argument('--batch-size', dest="BATCH_SIZE", default=8, type=int,
-                        help='Batch Size')
-    parser.add_argument('--word-embed-cache-path', dest="WORD_EMBED_CACHE_PATH", default=f'{home}/.word_vectors_cache', type=str,
-                        help='Glove word embedding cache dir path, Defaults to .word_vectors_cache directory in home dir')
-    parser.add_argument('--word-embed-name', dest="WORD_EMBED_NAME", default='840B',
-                        type=str, help='Glove w Embedding name')
-    parser.add_argument('--word-embed-freeze', dest="WORD_EMBED_FREEZE", default=False,
-                        type=bool, help='Freeze word embedding weights')
-    parser.add_argument('--word-embed-dim', dest="WORD_EMBED_DIM", default=512, type=int,
-                        help='Word embedding dimension. Ignore if providing a pre-trained word embedding')
+    parser = argparse.ArgumentParser(description="Get Input Values")
+    parser.add_argument(
+        "--data-path",
+        dest="DATA_PATH",
+        default='data/data_ready_list.pkl',
+        type=str,
+        help="Data file path - pickle format",
+    )
+    parser.add_argument(
+        "--comment",
+        dest="COMMENT",
+        default=f"Training model at UTC: {datetime.utcnow()}",
+        type=str,
+        help="Any comment about training step",
+    )
+    parser.add_argument(
+        "--exp-name",
+        dest="EXPERIMENT_NAME",
+        default="PytorchDualLoss",
+        type=str,
+        help="MLFLOW Experiment Name",
+    )
+    parser.add_argument(
+        "--fw", dest="FRAMEWORK", default="Pytorch", type=str, help="Framework name"
+    )
+    parser.add_argument(
+        "--epochs", dest="EPOCHS", default=35, type=int, help="Number of epochs to run"
+    )
+    parser.add_argument(
+        "--dropout", dest="DROPOUT", default=0.5, type=float, help="Dropout to apply"
+    )
+    parser.add_argument(
+        "--rnn_stack_size",
+        dest="RNN_STACK_SIZE",
+        default=1,
+        type=int,
+        help="Number of LSTM layers to stack",
+    )
+    parser.add_argument(
+        "--max-sen-len",
+        dest="MAX_SENTENCE_LEN",
+        default=800,
+        type=int,
+        help="Max Senetence Length",
+    )
+    parser.add_argument(
+        "--max-word-len",
+        dest="MAX_WORD_LEN",
+        default=0,
+        type=int,
+        help="Max Word Length",
+    )
+    parser.add_argument(
+        "--lr", dest="LEARNING_RATE", default=0.001, type=float, help="Learning Rate"
+    )
+    parser.add_argument(
+        "--split-size",
+        dest="TEST_SPLIT",
+        default=0.2,
+        type=float,
+        help="Test Split Size",
+    )
+    parser.add_argument("--gpu", dest="GPU", default=True, type=bool, help="Use GPU")
+    parser.add_argument(
+        "--batch-size", dest="BATCH_SIZE", default=8, type=int, help="Batch Size"
+    )
+    parser.add_argument(
+        "--word-embed-cache-path",
+        dest="WORD_EMBED_CACHE_PATH",
+        default=f"{home}/.word_vectors_cache",
+        type=str,
+        help="Glove word embedding cache dir path, Defaults to .word_vectors_cache directory in home dir",
+    )
+    parser.add_argument(
+        "--word-embed-name",
+        dest="WORD_EMBED_NAME",
+        default="840B",
+        type=str,
+        help="Glove w Embedding name",
+    )
+    parser.add_argument(
+        "--word-embed-freeze",
+        dest="WORD_EMBED_FREEZE",
+        default=False,
+        type=bool,
+        help="Freeze word embedding weights",
+    )
+    parser.add_argument(
+        "--word-embed-dim",
+        dest="WORD_EMBED_DIM",
+        default=512,
+        type=int,
+        help="Word embedding dimension. Ignore if providing a pre-trained word embedding",
+    )
 
+    parser.add_argument(
+        "--char-cnn-out-dim",
+        dest="CHAR_CNN_OUT_DIM",
+        default=32,
+        type=int,
+        help="Word embedding dimension. Ignore if providing a pre-trained word embedding",
+    )
+
+    parser.add_argument(
+        "--rnn-hidden-size",
+        dest="RNN_HIDDEN_SIZE",
+        default=32,
+        type=int,
+        help="Word embedding dimension. Ignore if providing a pre-trained word embedding",
+    )
+
+    parser.add_argument(
+        "--example_parameter",
+        dest="EXAMPLE_PARAM",
+        default="",
+        type=str,
+        help="Ignore this. Just to show an example of param from MLproject",
+    )
 
     args = parser.parse_args()
-
 
     mlflow.set_experiment(args.EXPERIMENT_NAME)
     with mlflow.start_run() as run:
@@ -775,12 +872,13 @@ if __name__ == "__main__":
         mlflow.log_param("COMMENT", args.COMMENT)
         mlflow.log_param("EPOCHS", args.EPOCHS)
         mlflow.log_param("DROPOUT", args.DROPOUT)
+        mlflow.log_param("CHAR_CNN_OUT_DIM", args.CHAR_CNN_OUT_DIM)
         mlflow.log_param("RNN_STACK_SIZE", args.RNN_STACK_SIZE)
         mlflow.log_param("LEARNING_RATE", args.LEARNING_RATE)
         mlflow.log_param("TEST_SPLIT", args.TEST_SPLIT)
         mlflow.log_param("WORD_EMBED_DIM", args.WORD_EMBED_DIM)
         mlflow.log_param("GPU_AVAILABLE", torch.cuda.is_available())
-
+        mlflow.log_param("RNN_HIDDEN_SIZE", args.RNN_HIDDEN_SIZE)
         mlflow.log_param("WORD_EMBED_FREEZE", args.WORD_EMBED_FREEZE)
         commit_id = git_commit_push(commit_message=args.COMMENT)
         mlflow.log_param("COMMIT ID", commit_id)
@@ -796,10 +894,7 @@ if __name__ == "__main__":
             vectors = None
 
         # Load Data
-        if args.DATA_PATH:
-            X_text_list_as_is, X_text_list, y_ner_list = load_data(args.DATA_PATH)
-        else:
-            X_text_list_as_is, X_text_list, y_ner_list = load_data()
+        X_text_list_as_is, X_text_list, y_ner_list = load_data(args.DATA_PATH)
 
         # Get POS tags
         X_tags, tag_to_index = get_POS_tags(X_text_list)
@@ -812,9 +907,9 @@ if __name__ == "__main__":
 
         SENTENCE_LEN_LIST = [len(sentence) for sentence in X_text_list]
 
-
-
-        X_text_list = trim_list_of_lists_upto_max_len(X_text_list, args.MAX_SENTENCE_LEN)
+        X_text_list = trim_list_of_lists_upto_max_len(
+            X_text_list, args.MAX_SENTENCE_LEN
+        )
         X_text_list_as_is = trim_list_of_lists_upto_max_len(
             X_text_list_as_is, args.MAX_SENTENCE_LEN
         )
@@ -824,32 +919,75 @@ if __name__ == "__main__":
             f"Max sentence len after trimming upto {args.MAX_SENTENCE_LEN} words is {max([len(sentence) for sentence in X_text_list])}"
         )
 
-        alnum, numeric, alpha, digit, lower, title, ascii = enrich_data(X_text_list_as_is)
+        alnum, numeric, alpha, digit, lower, title, ascii = enrich_data(
+            X_text_list_as_is
+        )
 
-        alnum = pad_and_stack_list_of_list(alnum, max_sentence_len=args.MAX_SENTENCE_LEN, pad_value=-1,
-                                           tensor_type=torch.FloatTensor)
-        numeric = pad_and_stack_list_of_list(numeric, max_sentence_len=args.MAX_SENTENCE_LEN, pad_value=-1,
-                                            tensor_type=torch.FloatTensor)
-        alpha = pad_and_stack_list_of_list(alpha, max_sentence_len=args.MAX_SENTENCE_LEN, pad_value=-1,
-                                           tensor_type=torch.FloatTensor)
-        digit = pad_and_stack_list_of_list(digit, max_sentence_len=args.MAX_SENTENCE_LEN, pad_value=-1,
-                                           tensor_type=torch.FloatTensor)
-        lower = pad_and_stack_list_of_list(lower, max_sentence_len=args.MAX_SENTENCE_LEN, pad_value=-1,
-                                           tensor_type=torch.FloatTensor)
-        title = pad_and_stack_list_of_list(title, max_sentence_len=args.MAX_SENTENCE_LEN, pad_value=-1,
-                                           tensor_type=torch.FloatTensor)
-        ascii = pad_and_stack_list_of_list(ascii, max_sentence_len=args.MAX_SENTENCE_LEN, pad_value=-1,
-                                           tensor_type=torch.FloatTensor)
+        alnum = pad_and_stack_list_of_list(
+            alnum,
+            max_sentence_len=args.MAX_SENTENCE_LEN,
+            pad_value=-1,
+            tensor_type=torch.FloatTensor,
+        )
+        numeric = pad_and_stack_list_of_list(
+            numeric,
+            max_sentence_len=args.MAX_SENTENCE_LEN,
+            pad_value=-1,
+            tensor_type=torch.FloatTensor,
+        )
+        alpha = pad_and_stack_list_of_list(
+            alpha,
+            max_sentence_len=args.MAX_SENTENCE_LEN,
+            pad_value=-1,
+            tensor_type=torch.FloatTensor,
+        )
+        digit = pad_and_stack_list_of_list(
+            digit,
+            max_sentence_len=args.MAX_SENTENCE_LEN,
+            pad_value=-1,
+            tensor_type=torch.FloatTensor,
+        )
+        lower = pad_and_stack_list_of_list(
+            lower,
+            max_sentence_len=args.MAX_SENTENCE_LEN,
+            pad_value=-1,
+            tensor_type=torch.FloatTensor,
+        )
+        title = pad_and_stack_list_of_list(
+            title,
+            max_sentence_len=args.MAX_SENTENCE_LEN,
+            pad_value=-1,
+            tensor_type=torch.FloatTensor,
+        )
+        ascii = pad_and_stack_list_of_list(
+            ascii,
+            max_sentence_len=args.MAX_SENTENCE_LEN,
+            pad_value=-1,
+            tensor_type=torch.FloatTensor,
+        )
 
-        x_enriched_features = torch.stack((alnum, numeric, alpha, digit, lower, title, ascii), dim=2)
+        x_enriched_features = torch.stack(
+            (alnum, numeric, alpha, digit, lower, title, ascii), dim=2
+        )
         ENRICH_FEAT_DIM = x_enriched_features.size(-1)
 
         # Split data in test and train plus return segregate as input lists
 
-        (X_text_list_train, X_text_list_test), (X_text_list_as_is_train, X_text_list_as_is_test), \
-        (X_tags_train, X_tags_test), (x_enriched_features_train, x_enriched_features_test), \
-        (y_ner_list_train, y_ner_list_test), (train_index, test_index) = split_test_train(
-        X_text_list, X_text_list_as_is, X_tags, x_enriched_features, y_ner_list, split_size=args.TEST_SPLIT)
+        (
+            (X_text_list_train, X_text_list_test),
+            (X_text_list_as_is_train, X_text_list_as_is_test),
+            (X_tags_train, X_tags_test),
+            (x_enriched_features_train, x_enriched_features_test),
+            (y_ner_list_train, y_ner_list_test),
+            (train_index, test_index),
+        ) = split_test_train(
+            X_text_list,
+            X_text_list_as_is,
+            X_tags,
+            x_enriched_features,
+            y_ner_list,
+            split_size=args.TEST_SPLIT,
+        )
 
         # Set some important parameters values
         ALL_LABELS = []
@@ -905,8 +1043,6 @@ if __name__ == "__main__":
             X_tags_train, tag_to_index=tag_to_index, max_sen_len=args.MAX_SENTENCE_LEN
         )
 
-
-
         # Encode y NER
         y_ner_encoder, y_ner_padded_train, y_ner_padded_test = encode_ner_y(
             y_ner_list_train, y_ner_list_test, CLASS_COUNT_DICT, args.MAX_SENTENCE_LEN
@@ -924,7 +1060,6 @@ if __name__ == "__main__":
                     "x_postag_padded": x_postag_padded_train[i],
                     "x_enriched_features": x_enriched_features_train[i],
                     "y_ner_padded": y_ner_padded_train[i],
-
                 }
                 for i in range(x_padded_train.shape[0])
             ]
@@ -968,6 +1103,8 @@ if __name__ == "__main__":
             learning_rate=args.LEARNING_RATE,
             word_embedding_weights=x_embed_weights,
             word_embedding_freeze=args.WORD_EMBED_FREEZE,
+            char_cnn_out_dim=args.CHAR_CNN_OUT_DIM,
+            rnn_hidden_size=args.RNN_HIDDEN_SIZE,
         )
         model_utils.train(args.EPOCHS)
 

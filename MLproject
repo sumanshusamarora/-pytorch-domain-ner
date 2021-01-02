@@ -1,0 +1,10 @@
+name: DomainNER
+
+conda_env: environment.yml
+
+entry_points:
+  main:
+    parameters:
+      example_parameter: {type: str, default="string example"}
+
+    command: "python train_cnn_rnn_crf.py --example-parameter {example_parameter}"
