@@ -851,7 +851,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--example_parameter",
         dest="EXAMPLE_PARAM",
-        default="",
+        default="example",
         type=str,
         help="Ignore this. Just to show an example of param from MLproject",
     )
@@ -859,6 +859,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     mlflow.set_experiment(args.EXPERIMENT_NAME)
+    #mlflow.set_tracking_uri('mlruns/1')
     with mlflow.start_run() as run:
         mlflow.set_tags(
             {
