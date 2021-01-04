@@ -1,4 +1,5 @@
 import os
+import shutil
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
@@ -30,6 +31,8 @@ import mlflow.pytorch
 import subprocess
 from datetime import datetime
 from pathlib import Path
+import warnings
+warnings.filterwarnings('always')
 
 home = str(Path.home())
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -275,6 +278,7 @@ class EntityExtraction(nn.Module):
         word_embed_dim=256,
         tag_embed_dim=36,
         char_embed_dim=124,
+        rnn_type="LSTM",
         rnn_embed_dim=512,
         enrich_dim=7,
         char_embedding=True,
@@ -328,7 +332,12 @@ class EntityExtraction(nn.Module):
         )
 
         # LSTM for concatenated input
-        self.lstm_ner = nn.LSTM(
+        if rnn_type == "GRU":
+            rnn_layer = nn.GRU
+        else:
+            rnn_layer = nn.LSTM
+
+        self.lstm_ner = rnn_layer(
             input_size=self.word_embed_dim
             + self.tag_embed_dim
             + self.char_cnn_out_dim
@@ -431,8 +440,10 @@ class ClassificationModelUtils:
         dataloader_test,
         ner_class_weights,
         num_classes,
+        y_o_index,
         cuda=True,
         dropout=0.3,
+        rnn_type="LSTM",
         rnn_stack_size=2,
         rnn_hidden_size=512,
         learning_rate=0.001,
@@ -456,10 +467,12 @@ class ClassificationModelUtils:
 
         self.ner_class_weights = ner_class_weights
         self.num_classes = num_classes
+        self.y_o_index = y_o_index
 
         self.model = EntityExtraction(
             num_classes=NUM_CLASSES,
             dropout_ratio=dropout,
+            rnn_type=rnn_type,
             rnn_stack_size=rnn_stack_size,
             rnn_hidden_size=rnn_hidden_size,
             word_embed_dim=word_embed_dim,
@@ -495,15 +508,16 @@ class ClassificationModelUtils:
         # CRF
         # self.crf_model = CRF(self.num_classes+1).to(device)
 
+
     def evaluate_classification_metrics(self, truth, prediction, type="ner"):
         if type == "ner":
             average = "macro"
         else:
             average = None
-        precision = precision_score(truth, prediction, average=average)
+        precision = precision_score(truth, prediction, average=average, zero_division=0)
         accuracy = accuracy_score(truth, prediction)
-        f1 = f1_score(truth, prediction, average=average)
-        recall = recall_score(truth, prediction, average=average)
+        f1 = f1_score(truth, prediction, average=average, zero_division=0)
+        recall = recall_score(truth, prediction, average=average, zero_division=0)
         return accuracy, precision, recall, f1
 
     def plot_graphs(self, figsize=(24, 22)):
@@ -595,7 +609,7 @@ class ClassificationModelUtils:
                 _ = [
                     self.test_epoch_truth_all.append(out)
                     for out in np.where(
-                        test_ner_truth_result == 0, 16, test_ner_truth_result
+                        test_ner_truth_result == 0, self.y_o_index, test_ner_truth_result
                     )
                 ]
 
@@ -689,7 +703,7 @@ class ClassificationModelUtils:
                 _ = [
                     self.epoch_truth_all.append(out)
                     for out in np.where(
-                        test_ner_truth_result == 0, 16, test_ner_truth_result
+                        test_ner_truth_result == 0, self.y_o_index, test_ner_truth_result
                     )
                 ]
 
@@ -755,7 +769,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--exp-name",
         dest="EXPERIMENT_NAME",
-        default="PytorchDualLoss",
+        default="LIQ Unstructured Forms",
         type=str,
         help="MLFLOW Experiment Name",
     )
@@ -778,7 +792,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max-sen-len",
         dest="MAX_SENTENCE_LEN",
-        default=800,
+        default=700,
         type=int,
         help="Max Senetence Length",
     )
@@ -808,14 +822,15 @@ if __name__ == "__main__":
         dest="WORD_EMBED_CACHE_PATH",
         default=f"{home}/.word_vectors_cache",
         type=str,
-        help="Glove word embedding cache dir path, Defaults to .word_vectors_cache directory in home dir",
+        help="Glove word embedding cache dir path, Defaults to .word_vectors_cache "
+             "directory in home dir. Pass '' or None to train embeddings from scratch",
     )
     parser.add_argument(
         "--word-embed-name",
         dest="WORD_EMBED_NAME",
         default="840B",
         type=str,
-        help="Glove w Embedding name",
+        help="Glove word embedding name",
     )
     parser.add_argument(
         "--word-embed-freeze",
@@ -824,6 +839,7 @@ if __name__ == "__main__":
         type=bool,
         help="Freeze word embedding weights",
     )
+
     parser.add_argument(
         "--word-embed-dim",
         dest="WORD_EMBED_DIM",
@@ -837,7 +853,15 @@ if __name__ == "__main__":
         dest="CHAR_CNN_OUT_DIM",
         default=32,
         type=int,
-        help="Word embedding dimension. Ignore if providing a pre-trained word embedding",
+        help="Character CNN out dimentions",
+    )
+
+    parser.add_argument(
+        "--rnn-type",
+        dest="RNN_TYPE",
+        default='LSTM',
+        type=str,
+        help="RNN Type - LSTM or GRU",
     )
 
     parser.add_argument(
@@ -845,7 +869,7 @@ if __name__ == "__main__":
         dest="RNN_HIDDEN_SIZE",
         default=512,
         type=int,
-        help="Word embedding dimension. Ignore if providing a pre-trained word embedding",
+        help="LSTM hidden size",
     )
 
     parser.add_argument(
@@ -859,6 +883,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     mlflow.set_experiment(args.EXPERIMENT_NAME)
+    experiment = mlflow.get_experiment_by_name(args.EXPERIMENT_NAME)
     #mlflow.set_tracking_uri('mlruns/1')
     with mlflow.start_run() as run:
         mlflow.set_tags(
@@ -877,22 +902,27 @@ if __name__ == "__main__":
         mlflow.log_param("RNN_STACK_SIZE", args.RNN_STACK_SIZE)
         mlflow.log_param("LEARNING_RATE", args.LEARNING_RATE)
         mlflow.log_param("TEST_SPLIT", args.TEST_SPLIT)
-        mlflow.log_param("WORD_EMBED_DIM", args.WORD_EMBED_DIM)
         mlflow.log_param("GPU_AVAILABLE", torch.cuda.is_available())
         mlflow.log_param("RNN_HIDDEN_SIZE", args.RNN_HIDDEN_SIZE)
-        mlflow.log_param("WORD_EMBED_FREEZE", args.WORD_EMBED_FREEZE)
+        mlflow.log_param("BATCH_SIZE", args.BATCH_SIZE)
+        mlflow.log_param("DATA_PATH", args.DATA_PATH)
+
         commit_id = git_commit_push(commit_message=args.COMMENT)
         mlflow.log_param("COMMIT ID", commit_id)
-        ARTIFACTS_DIR = os.path.join(os.path.dirname(__file__), "artifacts") #, commit_id)
-        #if not os.path.exists(ARTIFACTS_DIR):
-        #    os.makedirs(ARTIFACTS_DIR)
-        #mlflow.log_param("ARTIFACTS_DIR", ARTIFACTS_DIR)
-        mlflow.log_param("WORD_EMBED_CACHE_PATH", args.WORD_EMBED_CACHE_PATH)
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        ARTIFACTS_DIR = os.path.join(BASE_DIR, "artifacts")
+        if not os.path.exists(ARTIFACTS_DIR):
+            os.makedirs(ARTIFACTS_DIR)
 
-        if os.path.exists(args.WORD_EMBED_CACHE_PATH):
+
+        if isinstance(args.WORD_EMBED_CACHE_PATH, str) and args.WORD_EMBED_CACHE_PATH.strip() != "":
             vectors = GloVe(name=args.WORD_EMBED_NAME, cache=args.WORD_EMBED_CACHE_PATH)
         else:
             vectors = None
+
+        # Word embedding logging
+        mlflow.log_param("WORD_EMBED_CACHE_PATH", args.WORD_EMBED_CACHE_PATH)
+        mlflow.log_param("WORD_EMBED_FREEZE", args.WORD_EMBED_FREEZE)
 
         # Load Data
         X_text_list_as_is, X_text_list, y_ner_list = load_data(args.DATA_PATH)
@@ -903,9 +933,10 @@ if __name__ == "__main__":
             dill.dump(tag_to_index, inf)
 
         POSTAG_EMBED_DIM = max(tag_to_index.values()) + 1
+        mlflow.log_param("DATA_SIZE", len(X_text_list))
         mlflow.log_param("POSTAG_EMBED_DIM", POSTAG_EMBED_DIM)
 
-        SENTENCE_LEN_LIST = [len(sentence) for sentence in X_text_list]
+        # SENTENCE_LEN_LIST = [len(sentence) for sentence in X_text_list]
 
         X_text_list = trim_list_of_lists_upto_max_len(
             X_text_list, args.MAX_SENTENCE_LEN
@@ -1014,10 +1045,13 @@ if __name__ == "__main__":
 
         if vectors is not None:
             x_embed_weights = torch.stack([vectors[word] for word in x_encoder.vocab])
+            args.WORD_EMBED_DIM = x_embed_weights.size(-1)
             mlflow.log_param("EMBEDDING_WEIGHTS", x_embed_weights.size())
         else:
             x_embed_weights = None
             mlflow.log_param("EMBEDDING_WEIGHTS", x_embed_weights)
+
+        mlflow.log_param("WORD_EMBED_DIM", args.WORD_EMBED_DIM)
 
         # Tokenize Characters
         (
@@ -1048,7 +1082,10 @@ if __name__ == "__main__":
         with open(os.path.join(ARTIFACTS_DIR, "y_ner_encoder"), "wb") as inf:
             dill.dump(y_ner_encoder, inf)
 
-        mlflow.log_artifacts("artifacts", artifact_path="files")
+        y_o_index = y_ner_encoder.token_to_index['O']
+        mlflow.log_param("Y_O_INDEX", y_o_index)
+
+        mlflow.log_artifacts('artifacts', 'files')
 
         # Create train dataloader
         dataset_train = Dataset(
@@ -1093,6 +1130,7 @@ if __name__ == "__main__":
             dataloader_train,
             dataloader_test,
             ner_class_weights,
+            y_o_index=y_o_index,
             num_classes=NUM_CLASSES,
             cuda=args.GPU,
             rnn_stack_size=args.RNN_STACK_SIZE,
@@ -1104,6 +1142,7 @@ if __name__ == "__main__":
             word_embedding_freeze=args.WORD_EMBED_FREEZE,
             char_cnn_out_dim=args.CHAR_CNN_OUT_DIM,
             rnn_hidden_size=args.RNN_HIDDEN_SIZE,
+            rnn_type=args.RNN_TYPE,
         )
         model_utils.train(args.EPOCHS)
 
