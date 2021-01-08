@@ -157,11 +157,7 @@ if __name__ == "__main__":
     x_encoded = [x_encoder.encode(text) for text in X_text_list]
     x_padded = [pad_tensor(tensor, max_sentence_len) for tensor in x_encoded]
     x_padded = torch.LongTensor(torch.stack(x_padded))
-
-    import pdb;
-
-    pdb.set_trace()
-
+    
     x_char_padded = [
         [pad_tensor(x_char_encoder.encode(char), max_word_length) for char in word]
         for word in X_text_list_as_is
