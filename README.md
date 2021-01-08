@@ -4,6 +4,12 @@ The repo contains code for experimenting, training and serving a name entity rec
 
 The repository offers a script to automatically train model directly from github or via command line and finally serve the same model using MLFlow in-build pytorch support.
 
+## Prerequisites
+1) Python knowledge
+2) Tesseract installed and tesseract instllation path in your machine's PATH enviornment variable (if data is not available in text format)
+3) System admin access (if you need to create conda environment)
+
+
 ## Steps to run this on a local machine (tested on Ubuntu 18.04)
 Steps to run this on you local machine are as follows:
 
@@ -27,20 +33,164 @@ Skip below commands if you already have anaconda installed in your machine
 1) Run command ```conda env create -f environment.yml```
 2) Run command ```conda activate domain-ner```
 
+
+### Prepare Data
+
+The model expects data to a nested list os nested tuples as mentioned under [Data-Format](#data-format) section.
+
+#### Data Format
+Data should be a pickled list of nested tuples where each parent tuple represents a document and each child tuple of a parent represents word (separated by space) and its respective token classification. Example below - 
+```
+Assuming there are two documents as below - 
+1. Canberra is the capital of Commonwealth of Australia and Scott Morrison is its Prime Minister
+2. ANZ bank is one of the big 4 banks is Australia
+
+[(  ('canberra', 'LOC-B'),
+    ('is', 'O'),
+    ('the', 'O'),
+    ('capital', 'O'),
+    ('of', 'O'),
+    ('commonwealth', 'LOC-B'),
+    ('of', 'LOC-I'),
+    ('australia', 'LOC-I'),
+    ('scott', 'PER-B'),
+    ('morrison', 'PER-I'),
+    ('is', 'O'),
+    ('its', 'O'),
+    ('Prime', 'O'),
+    ('Minister', 'O')
+),
+(   ('anz', 'ORG-B'),
+    ('bank', 'ORG-I'),
+    ('is', 'O'),
+    ('one', 'O'),
+    ('of', 'O'),
+    ('the', 'O'),
+    ('big', 'O'),
+    ('4', 'O'),
+    ('banks', 'O'),
+    ('in', 'O'),
+    ('australia', 'LOC-B')
+),]
+```
+
+###### OCR
+If the original source of data are images, then it would first need to be OCR'd. Below command can be run to OCR all images in a directory by supplying diretory path and text save location as arguments to code. A full list of acceptable arguments is also provided below.
+```commandline
+python ocr_images.py --data-dir <path to image directory> --save-dir-path <directory to save text> --filename <filename to be saved with>
+``` 
+
+All acceptable parameters are - 
+```commandline
+--help                  Show this help message and exit
+--data-dir              Directory path containing json annotation files
+--allowed-image-ext     Allowed image file extensions separted by commas. Default - .jpg, .jpeg, .png
+--save-dir-path         Directory path to save dataset pickle file
+--filename              Name of pickle file to save
+--pickle-protocol       Pickle Protocol
+```
+
+###### Annotate data
+Data annotation can be done through either label studio tool or doccano. 
+
+Detailed instructions on how to use Label Studio are documented on [confluence](https://confluence.service.anz/pages/viewpage.action?pageId=771392590). 
+
+Doccano is an text annotation application hosted in Openshift dev environment and can be access though this link --> [Doccano](http://doccano-operationsautomation.apps.cpaas.service.test/). To setup your labelling project and to get access, please send an email to Sam Arora (sumanshu.arora@anz.com)
+
+
+###### Prepare data in reqired format
+Below command can be run to build data in a format that is expected by training code
+```commandline
+python prepare_data_from_label_studio_annotations.py --data-path <path to annotated data file> --file-ext <file extension of labelling files. Example .json> --save-dir-path <directory to save text> --filename <filename to be saved with> --pickle-protocol <defaults to 3>
+``` 
+
+```commandline
+  --help            Show this help message and exit
+  --data-path       Directory path containing json annotation files, defaults to data
+  --file-ext        File extension to look for in data path, defaults to json
+  --save-dir-path   Directory path to save dataset pickle file, defaults to data
+  --filename        Name of pickle file to save, defaults to data_ready_list.pkl
+  --pickle-protocol Pickle Protocol, defaults to 3
+```
+
 ### Training models and running experiments
+
+##### Train model
+Python file [train_cnn_rnn_crf.py](train_cnn_rnn_crf.py) requires to be run in order to train a model. All model parameters have a default value which can be changed in order to experiment. These parameters can be passed to model in follwing ways:
+
+###### Command line arguments
+Run below command with parameters shown in [Parameter](#parameters) with parameters of your choice
+```
+python train_cnn_rnn_crf.py --param param_value
+```
+Below is an example that trains model for 35 epochs on a custom dataset with a batch size of 8 and test set of 30%
+
+```
+python train_cnn_rnn_crf.py --data-path "path to data file" --batch-size 8 --epochs 35 --split-size .3
+```
+ 
+###### Config file
+The repository contains [config.yml](config.yml) file which contains default values for all the these parameters defined below in [Parameter](#parameters) section. A user can change the parameter/hyperparameter values in this file and run ```python train_cnn_rnn_crf.py``` to train the mdel with updated values
+
+###### Through mlflow
+Use can simply update the [config.yml](config.yml) to experiment with different parameters and run command ```mlflow run . --no-conda``` if you already have a conda environment setup and ```mlflow run .``` if user would like to setup a conda environment from scratch 
+
+###### Directly from github (Not recommended)
+Ideally, the data should never be put on github and hence in order to run directly from github, the data_path variable in config.yml should be set to the correct data location before running below process. Same way any other parameters that user might want to change can be changed directly on github config.yml before following below process.
+
+1) Ensure you have got conda installed in the machine. If not, install from official [Anaconda](https://docs.anaconda.com/anaconda/install/) site
+2) Ensure you have mlflow installed in your active conda environment. If not, run command ```conda install -c conda-forge mlflow```
+3) Ensure you have access to internet
+4) Run command ```mlflow run <git-repo-path>```
+
+## Parameters
+There are many parameters that we can experiment our models with. Below is a detailed list of parameters, their default values and allowed values.
+
+```
+  --data-path (str)  --> Data file path - pickle format (Defaults to data/data_ready_list.pkl)
+  --comment (str) --> Any comment about training step (Defaults to run time)
+  --exp-name (str) --> MLFLOW Experiment Name (Defaults to 'LIQ Unstructured Forms')
+  --epochs (int) --> Number of epochs to run (Defaults to 32)
+  --dropout (float) --> Dropout to apply (<1) (Defaults to .5)
+  --rnn-stack-size (int) --> Number of LSTM layers to stack (Defaults to 1)
+  --max-sen-len (int) --> Max Senetence Length (Defaults to 700)
+  --max-word-len (int) --> Max Word Length (Defaults to 0 which means auto calculate during training)
+  --lr (float) --> Learning Rate (Defaults to 0.001)
+  --split-size (float) --> Test Split Size Learning Rate (Defaults to 0.2)
+  --gpu (bool) --> Whether to use GPU or not (Defaults to True)
+  --batch-size (int) --> Batch Size (Defaults to 6)
+  --word-embed-cache-path (str) --> Glove word embedding cache dir path. 
+                                    Pass '' or None to train embeddings 
+                                    from scratch (Defaults to
+                                    .word_vectors_cache directory in home dir) 
+  --word-embed-name (str) --> Glove word embedding name (Defaults to 840B, other options - 6B, 27B, 42B)
+  --word-embed-freeze (bool) --> Freeze word embedding weights (Defaults to True)
+  --word-embed-dim (int) --> Word embedding dimension. Ignore if providing a pre-trained word
+                             embedding (Defaults to 512)
+  --char-cnn-out-dim (int) --> Character CNN out dimentions (Defaults to 32)
+  --rnn-type (str) --> RNN Type - LSTM or GRU (Defaults to LSTM)
+  --rnn-hidden-size (int) --> LSTM hidden size (Defaults to 512)
+```
+Above parameters can also be seen by running command ```python train_cnn_rnn_crf.py --help``` 
+
+### View and compare models
+
+##### Spin up GUI
 Run any one of the step 1 or 2 and then step 3
 
-1) Run command ```bash script.sh spinupgui <path-to-mlruns-directory-in-repository> 5000```
+1) Run command ```mlflow ui --host 0.0.0.0 --port 5000```
 
                                               OR
 
 2) Run command ```mlflow server --host 0.0.0.0 --port 5000```
-3) Open a browser and open link 127.0.0.1:5000
-### View and compare models
+3) Start a browser and open link 127.0.0.1:5000
+
+##### Compare
 1) At this point user should be able to see all experiments that exist in the repo already and also any new experiments that you will run in your local machine in the MLflow GUI
 
 ![alt text](images/MLFLOW-Server.PNG)
 2) Users can compare models based in evaluation metrices results and decide which model(s) they want to deploy
+
 ### Serving model(s)
 1) To be able to serve model(s), user needs to know the artifact & model path of it. To view this, open a model in the MLFlow GUI as shown in screenshot below
 
@@ -66,51 +216,5 @@ Run any one of the step 1 or 2 and then step 3
 
 ### Inference
 1) Once a model is deployed, it is already being served at a REST endpoint . In this instance at, https://127.0.0.1:2125
-2) To get predictions, one needs to send POST request on the endpoint
-3) Below is an example of REST call using python
-
-```
-import pandas as pd
-import requests
-import json
-dataset = pd.read_csv('data/final.csv')
-dataset = dataset.iloc[:, dataset.columns != 'v6392']
-data = dataset.sample(1)
-
-
-all_cols = list(data.columns)
-all_vals = data.values.tolist()
-
-input_data = {"columns":all_cols,
-              "data":all_vals}
-
-response = requests.post(url='http://127.0.0.1:2125/invocations',
-                         data=json.dumps(input_data),
-                         headers={"Content-type": "application/json"}
-                         )
-response_json = json.loads(response.text)
-print(response_json)
-```
-
-*Same code is available in repository as well. Please see [this](./model_inference.py) file*
-
-
-## Parameters
-There are many parameters that we can experiment our models with. Below screenshot shows complete list of parameters, their default values and allowed values
-
-![alt text](images/param-table.PNG)
-
-## Run experiments directly from github
-It is required to have data available to code for running experiments dorectly from github. So data should either be coming from cloud or if its a physical file not in cloud it should be available in code repository which is not the case as yet keeping data security in mind. But if you user wishes to run experiments directly from git then they can choose to add the file final.csv in data folder. Once that's done, please follow the below process -
-
-1) Ensure you have got conda installed in the machine. If not, install from official [Anaconda](https://docs.anaconda.com/anaconda/install/) site
-2) Ensure you have mlflow installed in your active conda environment. If not, run command ```conda install -c conda-forge mlflow```
-3) Ensure you have access to internet
-4) Run command ```mlflow run https://github.com/sumanshusamarora/mlflow-sklearn-classification.git -P model_type='RF' train_test_split_size=0.33```
-
-*User can pass any training parameters after the -P variable in the above command. The parameters are pretty much same as mentioned in Parameter section but the name may be slighly different. Refer the parameter section in [this](./MLproject) file to see all names that can be passed as parameters*
-
-
-
-
-
+2) To get predictions, one needs to send POST request on the endpoint (TBU)
+3) Code for inference is available in [infer.py](./infer.py)
