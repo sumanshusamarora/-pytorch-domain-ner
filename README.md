@@ -93,10 +93,6 @@ All acceptable parameters are -
 ###### Annotate data
 Data annotation can be done through either label studio tool or doccano. 
 
-Detailed instructions on how to use Label Studio are documented on [confluence](https://confluence.service.anz/pages/viewpage.action?pageId=771392590). 
-
-Doccano is an text annotation application hosted in Openshift dev environment and can be access though this link --> [Doccano](http://doccano-operationsautomation.apps.cpaas.service.test/). To setup your labelling project and to get access, please send an email to Sam Arora (sumanshu.arora@anz.com)
-
 
 ###### Prepare data in reqired format
 Below command can be run to build data in a format that is expected by training code
