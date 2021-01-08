@@ -213,4 +213,4 @@ Run any one of the step 1 or 2 and then step 3
 ### Inference
 1) Once a model is deployed, it is already being served at a REST endpoint . In this instance at, https://127.0.0.1:2125
 2) To get predictions, one needs to send POST request on the endpoint (TBU)
-3) Code for inference is available in [infer.py](./infer.py)
+3) Code for inference is available in [inference.py](./inference.py)
