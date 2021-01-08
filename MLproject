@@ -7,4 +7,4 @@ entry_points:
     parameters:
       example_parameter: {type: str, default: 'string example'}
 
-    command: "python train_cnn_rnn_crf.py --example-parameter {example_parameter}"
+    command: "python train_cnn_rnn_crf.py"
