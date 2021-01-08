@@ -7,7 +7,7 @@ The repository offers a script to automatically train model directly from github
 ## Prerequisites
 1) Python knowledge
 2) Tesseract installed and tesseract instllation path in your machine's PATH enviornment variable (if data is not available in text format)
-3) System admin access (if you need to create conda environment)
+3) Admin access to machine (if you need to create conda environment)
 
 
 ## Steps to run this on a local machine (tested on Ubuntu 18.04)
@@ -43,7 +43,7 @@ Data should be a pickled list of nested tuples where each parent tuple represent
 ```
 Assuming there are two documents as below - 
 1. Canberra is the capital of Commonwealth of Australia and Scott Morrison is its Prime Minister
-2. ANZ bank is one of the big 4 banks is Australia
+2. ABC Ltd is one of the largest IT company in Australia
 
 [(  ('canberra', 'LOC-B'),
     ('is', 'O'),
@@ -60,17 +60,17 @@ Assuming there are two documents as below -
     ('Prime', 'O'),
     ('Minister', 'O')
 ),
-(   ('anz', 'ORG-B'),
-    ('bank', 'ORG-I'),
+(   ('ABC', 'ORG-B'),
+    ('Ltd', 'ORG-I'),
     ('is', 'O'),
     ('one', 'O'),
     ('of', 'O'),
     ('the', 'O'),
-    ('big', 'O'),
-    ('4', 'O'),
-    ('banks', 'O'),
+    ('largest', 'O'),
+    ('IT', 'O'),
+    ('company', 'O'),
     ('in', 'O'),
-    ('australia', 'LOC-B')
+    ('Australia', 'LOC-B')
 ),]
 ```
 
