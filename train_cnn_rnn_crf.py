@@ -1,5 +1,8 @@
+"""
+Training code
+"""
 import os
-import shutil
+import ast
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,7 +13,6 @@ from sklearn.metrics import (
     f1_score,
     classification_report,
 )
-import pandas as pd
 from sklearn.utils.class_weight import compute_class_weight
 import torch
 import torch.nn.functional as F
@@ -31,14 +33,25 @@ import mlflow.pytorch
 import subprocess
 from datetime import datetime
 from pathlib import Path
+import yaml
 import warnings
-warnings.filterwarnings('always')
+warnings.filterwarnings('ignore')
 
 home = str(Path.home())
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+with open("config.yml", "r") as fh:
+    config = yaml.safe_load(fh)
+
+with open("environment.yml", "r") as fh:
+    conda_environment = yaml.safe_load(fh)
 
 def load_data(fpath="data/data_ready_list.pkl"):
+    """
+    Loads pickle list of list as per suggested format
+    :param fpath: filepath
+    :return: Returns X_list (as is), X_list (lower) and y_list
+    """
     with open(fpath, "rb") as in_file:
         dataset_ready = pickle.load(in_file)
 
@@ -48,8 +61,12 @@ def load_data(fpath="data/data_ready_list.pkl"):
 
     return X_text_list_as_is, X_text_list, y_ner_list
 
-
 def get_POS_tags(X_text_list):
+    """
+    Generates pos tags from NLTK
+    :param X_text_list:
+    :return: X_tags, tag_to_index dictionary
+    """
     X_tags = []
     all_tags = ["<pad>"]
     for lst in X_text_list:
@@ -73,6 +90,16 @@ def split_test_train(
     y_ner_list,
     split_size=0.3,
 ):
+    """
+    Splits x_text, x_tags, x_enriched and y to test and train
+    :param X_text_list:
+    :param X_text_list_as_is:
+    :param X_tags:
+    :param x_enriched_features:
+    :param y_ner_list:
+    :param split_size: defaults to .3
+    :return: Tuples for test and train for each input list
+    """
     test_index = random.choices(
         range(len(X_text_list)), k=int(split_size * len(X_text_list))
     )
@@ -103,17 +130,24 @@ def split_test_train(
     )
 
 
-def tokenize_sentence(X_text_list_train, X_text_list_test, MAX_SENTENCE_LEN):
+def tokenize_sentence(X_text_list_train, X_text_list_test, max_sent_len=800):
+    """
+    Tokenized sentences with train data list and fits on both train + test
+    :param X_text_list_train:
+    :param X_text_list_test:
+    :param max_sent_len: Max sentence len to pad to, defaults to 800
+    :return: x_encoder, x_padded_train, x_padded_test
+    """
     x_encoder = StaticTokenizerEncoder(
         sample=X_text_list_train, append_eos=False, tokenize=lambda x: x,
     )
     x_encoded_train = [x_encoder.encode(text) for text in X_text_list_train]
     x_padded_train = torch.LongTensor(
-        pad_sequence(x_encoded_train, MAX_SENTENCE_LEN + 1)
+        pad_sequence(x_encoded_train, max_sent_len + 1)
     )
 
     x_encoded_test = [x_encoder.encode(text) for text in X_text_list_test]
-    x_padded_test = torch.LongTensor(pad_sequence(x_encoded_test, MAX_SENTENCE_LEN + 1))
+    x_padded_test = torch.LongTensor(pad_sequence(x_encoded_test, max_sent_len + 1))
 
     if x_padded_train.shape[1] > x_padded_test.shape[1]:
         x_padded_test = torch.cat(
@@ -130,13 +164,20 @@ def tokenize_sentence(X_text_list_train, X_text_list_test, MAX_SENTENCE_LEN):
     return x_encoder, x_padded_train, x_padded_test
 
 
-def tokenize_character(X_text_list_train, X_text_list_test, MAX_SENTENCE_LEN):
+def tokenize_character(X_text_list_train, X_text_list_test, max_sent_len=800):
+    """
+    Tokenizes characters at word level
+    :param X_text_list_train:
+    :param X_text_list_test:
+    :param max_sent_len:
+    :return: x_char_encoder, x_char_padded_train, x_char_padded_test, max_word_length
+    """
     X_text_list_train = [
-        lst[:MAX_SENTENCE_LEN] + (MAX_SENTENCE_LEN - len(lst)) * ["<end>"]
+        lst[:max_sent_len] + (max_sent_len - len(lst)) * ["<end>"]
         for lst in X_text_list_train
     ]
     X_text_list_test = [
-        lst[:MAX_SENTENCE_LEN] + (MAX_SENTENCE_LEN - len(lst)) * ["<end>"]
+        lst[:max_sent_len] + (max_sent_len - len(lst)) * ["<end>"]
         for lst in X_text_list_test
     ]
 
@@ -151,7 +192,7 @@ def tokenize_character(X_text_list_train, X_text_list_test, MAX_SENTENCE_LEN):
         [x_char_encoder.encode(char) for char in word] for word in X_text_list_test
     ]
 
-    MAX_WORD_LENGTH = max(
+    max_word_length = max(
         [
             max([internal.shape[0] for internal in external])
             for external in x_char_encoded_train
@@ -162,8 +203,8 @@ def tokenize_character(X_text_list_train, X_text_list_test, MAX_SENTENCE_LEN):
     for lst in x_char_encoded_train:
         inner_list = []
         for ten in lst:
-            res = torch.zeros(MAX_WORD_LENGTH, dtype=torch.long)
-            res[: ten.shape[0]] = ten[:MAX_WORD_LENGTH]
+            res = torch.zeros(max_word_length, dtype=torch.long)
+            res[: ten.shape[0]] = ten[:max_word_length]
             inner_list.append(res)
         outer_list.append(inner_list)
 
@@ -173,31 +214,46 @@ def tokenize_character(X_text_list_train, X_text_list_test, MAX_SENTENCE_LEN):
     for lst in x_char_encoded_test:
         inner_list = []
         for ten in lst:
-            res = torch.zeros(MAX_WORD_LENGTH, dtype=torch.long)
-            res[: ten.shape[0]] = ten[:MAX_WORD_LENGTH]
+            res = torch.zeros(max_word_length, dtype=torch.long)
+            res[: ten.shape[0]] = ten[:max_word_length]
             inner_list.append(res)
         outer_list.append(inner_list)
 
     x_char_padded_test = torch.stack([torch.stack(lst) for lst in outer_list])
-    return x_char_encoder, x_char_padded_train, x_char_padded_test, MAX_WORD_LENGTH
+    return x_char_encoder, x_char_padded_train, x_char_padded_test, max_word_length
 
 
 def tokenize_pos_tags(X_tags, tag_to_index, max_sen_len=800):
+    """
+    One hot encodes pos tags
+    :param X_tags:
+    :param tag_to_index:
+    :param max_sen_len:
+    :return: One hot encoded vector
+    """
     return torch.nn.functional.one_hot(
         torch.stack([pad_tensor(torch.LongTensor(lst), max_sen_len) for lst in X_tags]),
         num_classes=max(tag_to_index.values()) + 1,
     )
 
 
-def encode_ner_y(y_ner_list_train, y_ner_list_test, CLASS_COUNT_DICT, MAX_SENTENCE_LEN):
-    y_ner_encoder = LabelEncoder(sample=CLASS_COUNT_DICT.keys())
+def encode_ner_y(y_ner_list_train, y_ner_list_test, class_count_dict, max_sent_len):
+    """
+    Tokenize y
+    :param y_ner_list_train:
+    :param y_ner_list_test:
+    :param class_count_dict:
+    :param max_sent_len:
+    :return:
+    """
+    y_ner_encoder = LabelEncoder(sample=class_count_dict.keys())
     y_ner_encoded_train = [
         [y_ner_encoder.encode(label) for label in label_list]
         for label_list in y_ner_list_train
     ]
     y_ner_encoded_train = [torch.stack(tens) for tens in y_ner_encoded_train]
     y_ner_padded_train = torch.LongTensor(
-        pad_sequence(y_ner_encoded_train, MAX_SENTENCE_LEN + 1)
+        pad_sequence(y_ner_encoded_train, max_sent_len + 1)
     )
 
     y_ner_encoded_test = [
@@ -206,7 +262,7 @@ def encode_ner_y(y_ner_list_train, y_ner_list_test, CLASS_COUNT_DICT, MAX_SENTEN
     ]
     y_ner_encoded_test = [torch.stack(tens) for tens in y_ner_encoded_test]
     y_ner_padded_test = torch.LongTensor(
-        pad_sequence(y_ner_encoded_test, MAX_SENTENCE_LEN + 1)
+        pad_sequence(y_ner_encoded_test, max_sent_len + 1)
     )
 
     if y_ner_padded_train.shape[1] > y_ner_padded_test.shape[1]:
@@ -225,6 +281,11 @@ def encode_ner_y(y_ner_list_train, y_ner_list_test, CLASS_COUNT_DICT, MAX_SENTEN
 
 
 def enrich_data(txt_list: list):
+    """
+    Generates enrichments features for each word in sequence
+    :param txt_list: Text list
+    :return: lists like alnum, numeric, alpha, digit, lower, title, ascii
+    """
     alnum = []
     numeric = []
     alpha = []
@@ -246,6 +307,11 @@ def enrich_data(txt_list: list):
 
 # Sample weights
 def calculate_sample_weights(y_ner_padded_train):
+    """
+    Calculates sample weights for each class
+    :param y_ner_padded_train:
+    :return: array consisting of sample weight for each class
+    """
     ner_class_weights = compute_class_weight(
         "balanced",
         classes=np.unique(torch.flatten(y_ner_padded_train).numpy()),
@@ -258,6 +324,14 @@ def calculate_sample_weights(y_ner_padded_train):
 def pad_and_stack_list_of_list(
     list_of_list: list, max_sentence_len=800, pad_value=0, tensor_type=torch.FloatTensor
 ):
+    """
+
+    :param list_of_list: list of list of sequence
+    :param max_sentence_len: defaults to 800
+    :param pad_value: defaults to 0
+    :param tensor_type: defaults to torch.FloatTensor
+    :return: stacked tensor
+    """
     padded = [
         pad_tensor(tensor_type(lst), length=max_sentence_len, padding_index=pad_value)
         for lst in list_of_list
@@ -269,6 +343,9 @@ def pad_and_stack_list_of_list(
 # Model defintion
 # Build Model
 class EntityExtraction(nn.Module):
+    """
+
+    """
     def __init__(
         self,
         num_classes,
@@ -288,9 +365,28 @@ class EntityExtraction(nn.Module):
         word_embedding_weights=None,
         word_embedding_freeze=True,
     ):
+        """
+
+        :param num_classes:
+        :param rnn_hidden_size:
+        :param rnn_stack_size:
+        :param rnn_bidirectional:
+        :param word_embed_dim:
+        :param tag_embed_dim:
+        :param char_embed_dim:
+        :param rnn_type:
+        :param rnn_embed_dim:
+        :param enrich_dim:
+        :param char_embedding:
+        :param char_cnn_out_dim:
+        :param dropout_ratio:
+        :param class_weights:
+        :param word_embedding_weights:
+        :param word_embedding_freeze:
+        """
         super().__init__()
         # self variables
-        self.NUM_CLASSES = num_classes
+        self.num_classes = num_classes
         self.char_embed_dim = char_embed_dim
         self.char_cnn_out_dim = char_cnn_out_dim
         self.rnn_embed_dim = rnn_embed_dim
@@ -358,11 +454,22 @@ class EntityExtraction(nn.Module):
         self.linear1 = nn.Linear(in_features=self.linear_in_size, out_features=128)
         self.linear_drop = nn.Dropout(self.dropout_ratio)
         self.linear_ner = nn.Linear(
-            in_features=128, out_features=self.NUM_CLASSES + 1
+            in_features=128, out_features=self.num_classes + 1
         )  # +1 for padding 0
-        self.crf = CRF(self.NUM_CLASSES + 1, batch_first=True)
+        self.crf = CRF(self.num_classes + 1, batch_first=True)
 
     def forward(self, x_word, x_pos, x_char, x_enrich, mask, y_word=None, train=True):
+        """
+
+        :param x_word: Padded word sequence
+        :param x_pos: Padded pos tag features
+        :param x_char: One hot encoded character features for each word
+        :param x_enrich: Binary enriched features for each word
+        :param mask: mask for padded values
+        :param y_word: y only for training step
+        :param train: True is training step
+        :return: emmission matrix, decoded sequence, crf loss
+        """
         x_char_shape = x_char.shape
         batch_size = x_char_shape[0]
 
@@ -411,11 +518,24 @@ class EntityExtraction(nn.Module):
                 emissions=ner_out, tags=y_word, mask=mask, reduction="token_mean"
             )
         else:
-            crf_out = None
+            crf_out = -1 * self.crf(emissions=ner_out, tags=torch.LongTensor(crf_out_decoded), mask=mask, reduction="token_mean"
+                               )
         return ner_out, crf_out_decoded, crf_out
+
+    def predict(self, x_word, x_pos, x_char, x_enrich, mask):
+        self.eval()
+        return self(x_word, x_pos, x_char, x_enrich, mask, train=False)
 
 
 def git_commit_push(commit_message, add=True, push=False):
+    """
+    Programatically runs code commit
+    Programatically runs code commit
+    :param commit_message:
+    :param add: Run git add .? Defaults to True
+    :param push: Run git push? Defaults to False
+    :return: commit id
+    """
     if add:
         subprocess.run(["git", "add", "."])
 
@@ -428,12 +548,21 @@ def git_commit_push(commit_message, add=True, push=False):
 
 
 def trim_list_of_lists_upto_max_len(lst_of_lst, max_len):
+    """
+    Trims each nested list to max len
+    :param lst_of_lst:
+    :param max_len:
+    :return: Trimmed list of list
+    """
     if isinstance(lst_of_lst, list):
         return [lst[:max_len] for lst in lst_of_lst]
     return None
 
 
 class ClassificationModelUtils:
+    """
+
+    """
     def __init__(
         self,
         dataloader_train,
@@ -454,6 +583,26 @@ class ClassificationModelUtils:
         word_embedding_weights=None,
         word_embedding_freeze=True,
     ):
+        """
+
+        :param dataloader_train:
+        :param dataloader_test:
+        :param ner_class_weights: None if no class weights
+        :param num_classes: Num of output classes
+        :param y_o_index:
+        :param cuda:
+        :param dropout:
+        :param rnn_type:
+        :param rnn_stack_size:
+        :param rnn_hidden_size:
+        :param learning_rate:
+        :param word_embed_dim:
+        :param postag_embed_dim:
+        :param char_cnn_out_dim:
+        :param enrich_dim:
+        :param word_embedding_weights:
+        :param word_embedding_freeze:
+        """
         if cuda:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             torch.cuda.empty_cache()
@@ -470,7 +619,7 @@ class ClassificationModelUtils:
         self.y_o_index = y_o_index
 
         self.model = EntityExtraction(
-            num_classes=NUM_CLASSES,
+            num_classes=num_classes,
             dropout_ratio=dropout,
             rnn_type=rnn_type,
             rnn_stack_size=rnn_stack_size,
@@ -509,18 +658,30 @@ class ClassificationModelUtils:
         # self.crf_model = CRF(self.num_classes+1).to(device)
 
 
-    def evaluate_classification_metrics(self, truth, prediction, type="ner"):
-        if type == "ner":
-            average = "macro"
-        else:
+    def evaluate_classification_metrics(self, truth, prediction, type="ner", average='macro'):
+        """
+        Evaluates classification metrics
+        :param truth: truth array
+        :param prediction: prediction array
+        :param type: ner or binary, defaults to ner
+        :param average: Defaulta to macro, micro and average are two other options
+        :return: Matrix results - accuracy, precision, recall, f1
+        """
+        if type != "ner":
             average = None
+
         precision = precision_score(truth, prediction, average=average, zero_division=0)
         accuracy = accuracy_score(truth, prediction)
         f1 = f1_score(truth, prediction, average=average, zero_division=0)
         recall = recall_score(truth, prediction, average=average, zero_division=0)
         return accuracy, precision, recall, f1
 
-    def plot_graphs(self, figsize=(24, 22)):
+    def plot_graphs(self, figsize=(24, 22), save_fig=True):
+        """
+        Plots graphs to show loss, accuracy, precision, recall and f1 for test and train
+        :param figsize:
+        :return:
+        """
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(3, 2, 2)
         ax.plot(self.epoch_losses, color="b", label="Train")
@@ -552,9 +713,17 @@ class ClassificationModelUtils:
         ax.legend()
         ax.set_title("F1")
 
+        if save_fig:
+            plt.savefig("artifacts/graph.png")
+
         plt.show()
 
+
     def validate(self):
+        """
+        Runs validation step
+        :return:
+        """
         test_losses = []
         test_ner_accs = []
         test_ner_precisions = []
@@ -563,6 +732,8 @@ class ClassificationModelUtils:
 
         self.test_epoch_prediction_all = []
         self.test_epoch_truth_all = []
+
+        self.model.eval()
 
         print("************Evaluating validation data now***************")
         for k, data_test in enumerate(self.dataloader_test):
@@ -592,11 +763,9 @@ class ClassificationModelUtils:
                     data_test["y_ner_padded"],
                 )
                 # Loss
-                # test_loss = self.criterion_crossentropy(test_ner_out.transpose(2, 1), data_test['y_ner_padded'])
                 test_losses.append(test_loss.item())
 
                 # Evaluation Metrics
-                # test_ner_out_result = torch.flatten(torch.argmax(test_ner_out, dim=2)).to('cpu').numpy()
                 test_ner_out_result = np.ravel(np.array(test_crf_out))
                 test_ner_truth_result = (
                     torch.flatten(data_test["y_ner_padded"]).to("cpu").numpy()
@@ -643,8 +812,15 @@ class ClassificationModelUtils:
         )
 
     def train(self, num_epochs=10):
+        """
+        Runs training step
+        :param num_epochs: defaults to 10
+        :return:
+        """
         index_metric_append = int(len(dataloader_train) / 3)
+
         for epoch in range(num_epochs):
+            self.model.train()
             self.crf_weights = []
             print(
                 f"\n\n------------------------- Epoch - {epoch + 1} of {num_epochs} -------------------------"
@@ -755,72 +931,72 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data-path",
         dest="DATA_PATH",
-        default='data/data_ready_list.pkl',
+        default=config['data_path'],
         type=str,
         help="Data file path - pickle format",
     )
     parser.add_argument(
         "--comment",
         dest="COMMENT",
-        default=f"Training model at UTC: {datetime.utcnow()}",
+        default=f"{config['comment']} : UTC {datetime.utcnow()}",
         type=str,
         help="Any comment about training step",
     )
     parser.add_argument(
         "--exp-name",
         dest="EXPERIMENT_NAME",
-        default="LIQ Unstructured Forms",
+        default=config['exp_name'],
         type=str,
         help="MLFLOW Experiment Name",
     )
     parser.add_argument(
-        "--fw", dest="FRAMEWORK", default="Pytorch", type=str, help="Framework name"
+        "--fw", dest="FRAMEWORK", default=config['fw'], type=str, help="Framework name"
     )
     parser.add_argument(
-        "--epochs", dest="EPOCHS", default=35, type=int, help="Number of epochs to run"
+        "--epochs", dest="EPOCHS", default=config['epochs'], type=int, help="Number of epochs to run"
     )
     parser.add_argument(
-        "--dropout", dest="DROPOUT", default=0.5, type=float, help="Dropout to apply"
+        "--dropout", dest="DROPOUT", default=config['dropout'], type=float, help="Dropout to apply"
     )
     parser.add_argument(
-        "--rnn_stack_size",
+        "--rnn-stack-size",
         dest="RNN_STACK_SIZE",
-        default=1,
+        default=config['rnn_stack_size'],
         type=int,
         help="Number of LSTM layers to stack",
     )
     parser.add_argument(
         "--max-sen-len",
         dest="MAX_SENTENCE_LEN",
-        default=700,
+        default=config['max_sen_len'],
         type=int,
         help="Max Senetence Length",
     )
     parser.add_argument(
         "--max-word-len",
         dest="MAX_WORD_LEN",
-        default=0,
+        default=config['max_word_len'],
         type=int,
         help="Max Word Length",
     )
     parser.add_argument(
-        "--lr", dest="LEARNING_RATE", default=0.001, type=float, help="Learning Rate"
+        "--lr", dest="LEARNING_RATE", default=config['lr'], type=float, help="Learning Rate"
     )
     parser.add_argument(
         "--split-size",
         dest="TEST_SPLIT",
-        default=0.2,
+        default=config['split_size'],
         type=float,
         help="Test Split Size",
     )
-    parser.add_argument("--gpu", dest="GPU", default=True, type=bool, help="Use GPU")
+    parser.add_argument("--gpu", dest="GPU", default=ast.literal_eval(config['gpu']), type=bool, help="Use GPU")
     parser.add_argument(
-        "--batch-size", dest="BATCH_SIZE", default=8, type=int, help="Batch Size"
+        "--batch-size", dest="BATCH_SIZE", default=config['batch_size'], type=int, help="Batch Size"
     )
     parser.add_argument(
         "--word-embed-cache-path",
         dest="WORD_EMBED_CACHE_PATH",
-        default=f"{home}/.word_vectors_cache",
+        default=config['word_embed_cache_path'].format(home=home) if '{home}' in config['word_embed_cache_path'] else config['word_embed_cache_path'],
         type=str,
         help="Glove word embedding cache dir path, Defaults to .word_vectors_cache "
              "directory in home dir. Pass '' or None to train embeddings from scratch",
@@ -828,14 +1004,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--word-embed-name",
         dest="WORD_EMBED_NAME",
-        default="840B",
+        default=config['word_embed_name'],
         type=str,
         help="Glove word embedding name",
     )
     parser.add_argument(
         "--word-embed-freeze",
         dest="WORD_EMBED_FREEZE",
-        default=False,
+        default=ast.literal_eval(config['word_embed_freeze']),
         type=bool,
         help="Freeze word embedding weights",
     )
@@ -843,7 +1019,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--word-embed-dim",
         dest="WORD_EMBED_DIM",
-        default=512,
+        default=config['word_embed_dim'],
         type=int,
         help="Word embedding dimension. Ignore if providing a pre-trained word embedding",
     )
@@ -851,7 +1027,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--char-cnn-out-dim",
         dest="CHAR_CNN_OUT_DIM",
-        default=32,
+        default=config['char_cnn_out_dim'],
         type=int,
         help="Character CNN out dimentions",
     )
@@ -859,7 +1035,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--rnn-type",
         dest="RNN_TYPE",
-        default='LSTM',
+        default=config['rnn_type'],
         type=str,
         help="RNN Type - LSTM or GRU",
     )
@@ -867,24 +1043,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--rnn-hidden-size",
         dest="RNN_HIDDEN_SIZE",
-        default=512,
+        default=config['rnn_hidden_size'],
         type=int,
         help="LSTM hidden size",
-    )
-
-    parser.add_argument(
-        "--example_parameter",
-        dest="EXAMPLE_PARAM",
-        default="example",
-        type=str,
-        help="Ignore this. Just to show an example of param from MLproject",
     )
 
     args = parser.parse_args()
 
     mlflow.set_experiment(args.EXPERIMENT_NAME)
     experiment = mlflow.get_experiment_by_name(args.EXPERIMENT_NAME)
-    #mlflow.set_tracking_uri('mlruns/1')
     with mlflow.start_run() as run:
         mlflow.set_tags(
             {
@@ -923,6 +1090,7 @@ if __name__ == "__main__":
         # Word embedding logging
         mlflow.log_param("WORD_EMBED_CACHE_PATH", args.WORD_EMBED_CACHE_PATH)
         mlflow.log_param("WORD_EMBED_FREEZE", args.WORD_EMBED_FREEZE)
+        mlflow.log_param("WORD_EMBED_NAME", args.WORD_EMBED_NAME)
 
         # Load Data
         X_text_list_as_is, X_text_list, y_ner_list = load_data(args.DATA_PATH)
@@ -1021,18 +1189,18 @@ if __name__ == "__main__":
         )
 
         # Set some important parameters values
-        ALL_LABELS = []
-        _ = [[ALL_LABELS.append(label) for label in lst] for lst in y_ner_list_train]
-        CLASS_COUNT_OUT = np.unique(ALL_LABELS, return_counts=True)
-        CLASS_COUNT_DICT = dict(zip(CLASS_COUNT_OUT[0], CLASS_COUNT_OUT[1]))
-        NUM_CLASSES = len([clas for clas in CLASS_COUNT_DICT.keys()])
+        all_labels = []
+        _ = [[all_labels.append(label) for label in lst] for lst in y_ner_list_train]
+        class_count_out = np.unique(all_labels, return_counts=True)
+        class_count_dict = dict(zip(class_count_out[0], class_count_out[1]))
+        num_classes = len([clas for clas in class_count_dict.keys()])
         print(
-            f"Max sentence length - {args.MAX_SENTENCE_LEN}, Total Classes = {NUM_CLASSES}"
+            f"Max sentence length - {args.MAX_SENTENCE_LEN}, Total Classes = {num_classes}"
         )
 
-        mlflow.log_param("TEST INDEX", str(test_index))
+        mlflow.log_param("TEST_INDEX", str(test_index))
         mlflow.log_param("MAX_SENTENCE_LEN", args.MAX_SENTENCE_LEN)
-        mlflow.log_param("NUM_CLASSES", NUM_CLASSES)
+        mlflow.log_param("NUM_CLASSES", num_classes)
         mlflow.log_param("ENRICH_FEAT_DIM", ENRICH_FEAT_DIM)
 
         # Tokenize Sentences
@@ -1058,11 +1226,11 @@ if __name__ == "__main__":
             x_char_encoder,
             x_char_padded_train,
             x_char_padded_test,
-            MAX_WORD_LENGTH,
+            max_word_length,
         ) = tokenize_character(
             X_text_list_as_is_train, X_text_list_as_is_test, args.MAX_SENTENCE_LEN
         )
-        mlflow.log_param("MAX_WORD_LENGTH", MAX_WORD_LENGTH)
+        mlflow.log_param("MAX_WORD_LENGTH", max_word_length)
 
         with open(os.path.join(ARTIFACTS_DIR, "x_char_encoder"), "wb") as inf:
             dill.dump(x_char_encoder, inf)
@@ -1077,7 +1245,7 @@ if __name__ == "__main__":
 
         # Encode y NER
         y_ner_encoder, y_ner_padded_train, y_ner_padded_test = encode_ner_y(
-            y_ner_list_train, y_ner_list_test, CLASS_COUNT_DICT, args.MAX_SENTENCE_LEN
+            y_ner_list_train, y_ner_list_test, class_count_dict, args.MAX_SENTENCE_LEN
         )
         with open(os.path.join(ARTIFACTS_DIR, "y_ner_encoder"), "wb") as inf:
             dill.dump(y_ner_encoder, inf)
@@ -1131,7 +1299,7 @@ if __name__ == "__main__":
             dataloader_test,
             ner_class_weights,
             y_o_index=y_o_index,
-            num_classes=NUM_CLASSES,
+            num_classes=num_classes,
             cuda=args.GPU,
             rnn_stack_size=args.RNN_STACK_SIZE,
             word_embed_dim=args.WORD_EMBED_DIM,
@@ -1146,7 +1314,7 @@ if __name__ == "__main__":
         )
         model_utils.train(args.EPOCHS)
 
-        mlflow.pytorch.log_model(model_utils.model, "ner_model")
+        mlflow.pytorch.log_model(model_utils.model, "model", conda_env=conda_environment)
 
         mlflow.log_metric("Loss-Test", model_utils.test_epoch_loss[-1])
         mlflow.log_metric("Loss-Train", model_utils.epoch_losses[-1])
@@ -1164,3 +1332,4 @@ if __name__ == "__main__":
         mlflow.log_metric("F1-Train", model_utils.epoch_ner_f1s[-1])
 
         model_utils.plot_graphs()
+        mlflow.log_artifact("artifacts/graph.png", 'files')
