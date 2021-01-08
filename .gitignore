@@ -4,3 +4,7 @@ artifacts/
 ner_model/
 .word_vectors_cache/
 __pycache__/
+*.pptm
+*.pptx
+*.ppt
+.idea/
