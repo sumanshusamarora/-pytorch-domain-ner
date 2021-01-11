@@ -1,6 +1,17 @@
 import os
 import torch
 import ast
+import dill
+import yaml
+from torchnlp.encoders.text import pad_tensor
+from torchnlp.datasets.dataset import Dataset
+from torch.utils.data import DataLoader
+import mlflow.pytorch
+from utils import (
+    get_word_proba,
+    get_entities_values_joint_probas,
+    get_one_value_each_entity,
+)
 from train_cnn_rnn_crf import (
     load_data,
     get_POS_tags,
@@ -9,14 +20,12 @@ from train_cnn_rnn_crf import (
     pad_and_stack_list_of_list,
     enrich_data,
 )
-import dill
-from torchnlp.encoders.text import pad_tensor
-from torchnlp.datasets.dataset import Dataset
-from torch.utils.data import DataLoader
-import mlflow.pytorch
 
-EXPERIMENT_ID = 0
-RUN_ID = "d40b2cb39125410b8a9b2d0588b142e7"
+with open("inference_config.yml", "r") as fh:
+    infer_config = yaml.safe_load(fh)
+
+EXPERIMENT_ID = infer_config["EXPERIMENT_ID"]
+RUN_ID = infer_config["RUN_ID"]
 
 experiment = mlflow.get_experiment(str(EXPERIMENT_ID))
 artifacts_uri = experiment.artifact_location
@@ -51,14 +60,12 @@ with open(f"mlruns/{EXPERIMENT_ID}/{RUN_ID}/artifacts/files/y_ner_encoder", "rb"
 with open(f"mlruns/{EXPERIMENT_ID}/{RUN_ID}/artifacts/files/tag_to_index", "rb") as infile:
     tag_to_index = dill.load(infile)
 
-
 X_text_list_as_is, X_text_list, y_ner_list = load_data()
 X_tags, tag_to_index_eval = get_POS_tags(X_text_list)
 X_text_list = trim_list_of_lists_upto_max_len(X_text_list, max_sentence_len)
 X_text_list_as_is = trim_list_of_lists_upto_max_len(X_text_list_as_is, max_sentence_len)
 y_ner_list = trim_list_of_lists_upto_max_len(y_ner_list, max_sentence_len)
 X_tags = trim_list_of_lists_upto_max_len(X_tags, max_sentence_len)
-
 
 alnum, numeric, alpha, digit, lower, title, ascii = enrich_data(X_text_list_as_is)
 
@@ -115,7 +122,7 @@ x_padded = [pad_tensor(tensor, max_sentence_len) for tensor in x_encoded]
 x_padded = torch.LongTensor(torch.stack(x_padded))
 
 x_char_padded = [
-    [pad_tensor(x_char_encoder.encode(char), max_word_length) for char in word]
+    [pad_tensor(x_char_encoder.encode(char[:max_word_length]), max_word_length) for char in word]
     for word in X_text_list_as_is
 ]
 x_char_padded = [
@@ -153,7 +160,6 @@ dataset_infer = Dataset(
     ]
 )
 
-
 dataloader_infer = DataLoader(dataset=dataset_infer, batch_size=2, shuffle=True)
 
 for i, data_infer in enumerate(dataloader_infer):
@@ -171,13 +177,24 @@ for i, data_infer in enumerate(dataloader_infer):
             mask.to(device),
         )
 
-        sentence = [[x_encoder.index_to_token[ind] for ind in x_p] for x_p in data_infer["x_padded"]]
-        true_y = [[y_ner_encoder.index_to_token[word] for word in true] for true in data_infer['y_ner_padded']]
-        result_y = [[y_ner_encoder.index_to_token[word] for word in prediction] for prediction in decoded]
+    out_proba, softmax_scores = get_word_proba(emmision_matrix=out,
+                               transition_matrix=model.crf.transitions,
+                               decoded_out=decoded,
+                               o_index=y_ner_encoder.token_to_index['O'])
 
-        print(i)
-        out_tuple_list = []
-        for j in range(len(sentence)):
-            out_tuple = [tupe for tupe in tuple(zip(sentence[j], true_y[j], result_y[j])) if tupe[0]!="<pad>" and tupe[1]!="O"]
-            out_tuple_list.append(out_tuple)
+    sentence_y = [[x_encoder.index_to_token[ind] for ind in x_p] for x_p in data_infer["x_padded"]]
+    true_y = [[y_ner_encoder.index_to_token[word] for word in true] for true in data_infer['y_ner_padded']]
+    result_y = [[y_ner_encoder.index_to_token[word] for word in prediction] for prediction in decoded]
+    proba_y = [[proba.item() for proba in proba_list] for proba_list in out_proba]
+
+    final_out_list = []
+    for j in range(len(sentence_y)):
+        final_out_list.append(get_entities_values_joint_probas(result=result_y[j],
+                                                               sentence=sentence_y[j],
+                                                               proba=proba_y[j],
+                                                               log_score=False,
+                                                               add_factor=0.5,
+                                                               restrict_if_no_begining=True))
+
+    final_out_dict = get_one_value_each_entity(final_out_list)
     break
