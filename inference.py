@@ -5,7 +5,16 @@ import argparse
 import os
 import torch
 import ast
-from utils import clean_text
+import dill
+from torchnlp.encoders.text import pad_tensor
+import mlflow.pytorch
+import yaml
+from utils import (
+    clean_text,
+    get_word_proba,
+    get_entities_values_joint_probas,
+    get_one_value_each_entity,
+)
 from train_cnn_rnn_crf import (
     get_POS_tags,
     trim_list_of_lists_upto_max_len,
@@ -13,13 +22,13 @@ from train_cnn_rnn_crf import (
     pad_and_stack_list_of_list,
     enrich_data,
 )
-import dill
-from torchnlp.encoders.text import pad_tensor
-import mlflow.pytorch
+
+with open("inference_config.yml", "r") as fh:
+    infer_config = yaml.safe_load(fh)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def predict(model, x_padded, x_postag_padded, x_char_padded, x_enriched_features):
+def predict(model, x_padded, x_postag_padded, x_char_padded, x_enriched_features, restrict_if_no_begining=True):
     mask = torch.where(x_padded > 0,
                        torch.Tensor([1]).type(torch.uint8),
                        torch.Tensor([0]).type(torch.uint8),
@@ -34,9 +43,26 @@ def predict(model, x_padded, x_postag_padded, x_char_padded, x_enriched_features
             mask.to(device),
         )
 
+    out_proba, softmax_scores = get_word_proba(emmision_matrix=out,
+                                               transition_matrix=model.crf.transitions,
+                                               decoded_out=decoded,
+                                               o_index=y_ner_encoder.token_to_index['O'])
+
     result_y = [[y_ner_encoder.index_to_token[word] for word in prediction] for prediction in decoded][:len(X_text_list_as_is)]
-    out_tuple = tuple(zip(X_text_list_as_is[0], result_y[0][:len(X_text_list_as_is[0])]))
-    return out_tuple
+    proba_y = [[proba.item() for proba in proba_list] for proba_list in out_proba]
+
+    final_out_list = []
+    for j in range(len(X_text_list_as_is)):
+        final_out_list.append(
+            get_entities_values_joint_probas(result=result_y[j],
+                                             sentence=X_text_list_as_is[j],
+                                             proba=proba_y[j],
+                                             log_score=False,
+                                             add_factor=0.5,
+                                             restrict_if_no_begining=restrict_if_no_begining))
+
+    final_out_dict = get_one_value_each_entity(final_out_list)
+    return final_out_dict
 
 
 if __name__ == "__main__":
@@ -44,7 +70,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data-text",
         dest="DATA_TEXT",
-        default=None,
+        default=infer_config["DATA_TEXT"],
         type=str,
         help="Text",
     )
@@ -52,16 +78,24 @@ if __name__ == "__main__":
     parser.add_argument(
         "--experiment-id",
         dest="EXPERIMENT_ID",
-        default='0',
+        default=infer_config["EXPERIMENT_ID"],
         type=str,
     )
 
     parser.add_argument(
         "--run-id",
         dest="RUN_ID",
-        default='d40b2cb39125410b8a9b2d0588b142e7',
+        default=infer_config["RUN_ID"],
         type=str,
         help="MLFLOW Run Id",
+    )
+
+    parser.add_argument(
+        "--restrict-if-no-beg",
+        dest="RESTRICT_IF_NO_BEG",
+        default=ast.literal_eval(infer_config["RESTRICT_IF_NO_BEG"]),
+        action='store_false',
+        help="Do not include prediction, if no beginning tag found",
     )
 
     args = parser.parse_args()
@@ -82,7 +116,6 @@ if __name__ == "__main__":
         TEST_INDEX = ast.literal_eval(infile.read())
 
     model = mlflow.pytorch.load_model(model_location).to(device)
-    model.eval()
 
     with open(f"mlruns/{args.EXPERIMENT_ID}/{args.RUN_ID}/artifacts/files/x_encoder", "rb") as infile:
         x_encoder = dill.load(infile)
@@ -157,9 +190,9 @@ if __name__ == "__main__":
     x_encoded = [x_encoder.encode(text) for text in X_text_list]
     x_padded = [pad_tensor(tensor, max_sentence_len) for tensor in x_encoded]
     x_padded = torch.LongTensor(torch.stack(x_padded))
-    
+
     x_char_padded = [
-        [pad_tensor(x_char_encoder.encode(char), max_word_length) for char in word]
+        [pad_tensor(x_char_encoder.encode(char[:max_word_length]), max_word_length) for char in word]
         for word in X_text_list_as_is
     ]
     x_char_padded = [
@@ -171,7 +204,7 @@ if __name__ == "__main__":
     x_postag_padded = tokenize_pos_tags(
         X_tags, tag_to_index=tag_to_index, max_sen_len=max_sentence_len
     )
-    out_tuple = predict(model, x_padded, x_postag_padded, x_char_padded, x_enriched_features)
-    print(out_tuple)
 
-
+    out_tuple = predict(model, x_padded, x_postag_padded, x_char_padded, x_enriched_features, args.RESTRICT_IF_NO_BEG)
+    print("\nOutput:")
+    print(out_tuple[0])
