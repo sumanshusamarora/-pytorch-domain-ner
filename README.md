@@ -211,6 +211,21 @@ Run any one of the step 1 or 2 and then step 3
 
 
 ### Inference
-1) Once a model is deployed, it is already being served at a REST endpoint . In this instance at, https://127.0.0.1:2125
-2) To get predictions, one needs to send POST request on the endpoint (TBU)
+1) Once a model is deployed using above commands, it is already being served at a REST endpoint. In this instance at, https://127.0.0.1:2125
+2) To get predictions, one needs to send POST request on the endpoint but this is not supported as of now. Expected by Mar 2021
 3) Code for inference is available in [inference.py](./inference.py)
+
+One can update variables in [inference_config.yml](./inference_config.yml) followed by command ```python inference.py``` to run inference on any text document.
+
+The other option is to run the command ```python inference.py``` with following command line arguments which are equivalent to updating [inference_config.yml](./inference_config.yml) file
+
+```commandline
+optional arguments:
+  -h, --help            show this help message and exit
+  --data-text           Text to be predicted
+  --experiment-id       Id of the experiment to be used for prediction
+  --run-id              MLFLOW Run Id, defaults to 0. Do not change if you are not sure
+  --restrict-if-no-beg  Does not restrict outputs that does not start with <label>-B tag if passed.
+                        Defaults to True which is recommended to avoid False Negative predictions
+```
+
