@@ -1,0 +1,20 @@
+data_path: "data/data_ready_list.pkl"
+comment: "Training NER model"
+exp_name: "LIQ Unstructured Forms"
+fw: "Pytorch"
+epochs: 40
+dropout: 0.5
+rnn_stack_size: 1
+max_sen_len: 800
+max_word_len: 0
+lr: 0.001
+split_size: 0.2
+gpu: "True"
+batch_size: 6
+word_embed_cache_path: "{home}/.word_vectors_cache"
+word_embed_name: "840B"
+word_embed_freeze: "False"
+word_embed_dim: 512
+char_cnn_out_dim: 32
+rnn_type: "LSTM"
+rnn_hidden_size: 512

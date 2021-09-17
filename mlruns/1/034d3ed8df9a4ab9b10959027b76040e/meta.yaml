@@ -1,0 +1,15 @@
+artifact_uri: file:///home/sam/work/research/pytorch-domain-ner/mlruns/1/034d3ed8df9a4ab9b10959027b76040e/artifacts
+end_time: 1609301601652
+entry_point_name: ''
+experiment_id: '1'
+lifecycle_stage: deleted
+name: ''
+run_id: 034d3ed8df9a4ab9b10959027b76040e
+run_uuid: 034d3ed8df9a4ab9b10959027b76040e
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1609301596555
+status: 4
+tags: []
+user_id: sam

@@ -60,7 +60,7 @@ for df_index in range(len(dataset)):
     final_text_list = []
     final_out_list = []
     prev_end = None
-    # i=0; label_dict = this_df_annotation_sorted[i]
+    # i=1; label_dict = this_df_annotation_sorted[i]
     for i, label_dict in enumerate(this_df_annotation_sorted):
         if len(label_dict["label"]) > 0:
             label = label_dict["label"][0]

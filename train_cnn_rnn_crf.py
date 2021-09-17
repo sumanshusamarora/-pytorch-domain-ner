@@ -328,7 +328,7 @@ def pad_and_stack_list_of_list(
 
     :param list_of_list: list of list of sequence
     :param max_sentence_len: defaults to 800
-    :param pad_value: defaults to 0
+    :param pad_value: defaults to 1
     :param tensor_type: defaults to torch.FloatTensor
     :return: stacked tensor
     """
@@ -455,7 +455,7 @@ class EntityExtraction(nn.Module):
         self.linear_drop = nn.Dropout(self.dropout_ratio)
         self.linear_ner = nn.Linear(
             in_features=128, out_features=self.num_classes + 1
-        )  # +1 for padding 0
+        )  # +1 for padding 1
         self.crf = CRF(self.num_classes + 1, batch_first=True)
 
     def forward(self, x_word, x_pos, x_char, x_enrich, mask, y_word=None, train=True):

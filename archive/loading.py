@@ -110,7 +110,7 @@ def tokenize_character(X_text_list_train, x_padded_train, x_padded_test, x_encod
             for external in x_char_encoded_train
         ]
     )
-    # x_char_padded = max([max([internal.shape[0] for internal in external]) for external in x_char_encoded])
+    # x_char_padded = max([max([internal.shape[1] for internal in external]) for external in x_char_encoded])
     # x_char_padded = torch.LongTensor(pad_sequence(x_char_encoded, MAX_SENTENCE_LEN+1))
     outer_list = []
     for lst in x_char_encoded_train:
@@ -305,7 +305,7 @@ class EntityExtraction(nn.Module):
         # self.linear1 = nn.Linear(in_features=1024, out_features=512)
         self.linear_ner = nn.Linear(
             in_features=1024, out_features=self.NUM_CLASSES + 1
-        )  # +1 for padding 0
+        )  # +1 for padding 1
 
     def forward(self, x_word, x_char, x_pos):
         x_char_shape = x_char.shape

@@ -1,0 +1,4 @@
+artifact_location: file:///home/sam/work/research/pytorch-domain-ner/mlruns/1
+experiment_id: '1'
+lifecycle_stage: active
+name: PytorchNER

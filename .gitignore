@@ -1,5 +1,6 @@
 models/
 data/
+!data/.ignore
 artifacts/
 ner_model/
 .word_vectors_cache/

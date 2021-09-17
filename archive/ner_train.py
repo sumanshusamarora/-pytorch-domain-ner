@@ -109,7 +109,7 @@ def tokenize_character(X_text_list_train, x_padded_train, x_padded_test, x_encod
             for external in x_char_encoded_train
         ]
     )
-    # x_char_padded = max([max([internal.shape[0] for internal in external]) for external in x_char_encoded])
+    # x_char_padded = max([max([internal.shape[1] for internal in external]) for external in x_char_encoded])
     # x_char_padded = torch.LongTensor(pad_sequence(x_char_encoded, MAX_SENTENCE_LEN+1))
     outer_list = []
     for lst in x_char_encoded_train:
@@ -359,7 +359,7 @@ class EntityExtraction(nn.Module):
         self.linear_drop = nn.Dropout(self.dropout_ratio)
         self.linear_ner = nn.Linear(
             in_features=128, out_features=self.NUM_CLASSES + 1
-        )  # +1 for padding 0
+        )  # +1 for padding 1
         self.crf = CRF(self.NUM_CLASSES + 1, batch_first=True)
 
     def forward(self, x_word, x_pos, x_char, mask, y_word=None, train=True):
@@ -377,7 +377,7 @@ class EntityExtraction(nn.Module):
             char_out = self.char_embed_drop(char_out)
 
             char_out_shape = char_out.shape
-            # char_out = char_out.view(char_out_shape[0], char_out_shape[1] * char_out_shape[2], char_out_shape[3])
+            # char_out = char_out.view(char_out_shape[1], char_out_shape[1] * char_out_shape[2], char_out_shape[3])
             char_out = self.conv_max_pool_char(char_out.permute(0, 1, 3, 2))
             char_out = char_out.view(
                 char_out_shape[0], char_out_shape[1], -1
@@ -838,20 +838,20 @@ if __name__ == "__main__":
         )
         """
         models = mlflow.pytorch.load_model(
-            'file:///home/sam/work/research/ner-domain-specific/mlruns/1/c8c25fed508a486fb0c81e05ce32ae91/artifacts/ner_model')
+            'file:///home/sam/work/research/pytorch-domain-ner/mlruns/1/c8c25fed508a486fb0c81e05ce32ae91/artifacts/ner_model')
 
         for i, data in enumerate(dataloader_train):
             break
 
-        k_list = [i for i, tens in enumerate(data['y_ner_padded']) if torch.unique(tens).shape[0]>2]
+        k_list = [i for i, tens in enumerate(data['y_ner_padded']) if torch.unique(tens).shape[1]>2]
         k = k_list[33]
-        mask = torch.where(data['x_padded'][k:k+1] > 0, torch.Tensor([1]).type(torch.uint8),
-                                   torch.Tensor([0]).type(torch.uint8)).to(device)
+        mask = torch.where(data['x_padded'][k:k+1] > 1, torch.Tensor([1]).type(torch.uint8),
+                                   torch.Tensor([1]).type(torch.uint8)).to(device)
 
 
         out, decoded, crf_loss = models(data['x_padded'][k:k+1].to(device), data['x_postag_padded'][k:k+1].to(device), mask, data['y_ner_padded'][k:k+1].to(device), train=False)
 
-        result = [word for word in decoded[0]]
+        result = [word for word in decoded[1]]
         truth = [word.item() for word in data['y_ner_padded'][k]]
 
         """
