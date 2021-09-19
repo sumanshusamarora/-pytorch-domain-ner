@@ -838,7 +838,7 @@ if __name__ == "__main__":
         )
         """
         models = mlflow.pytorch.load_model(
-            'file:///home/sam/work/research/pytorch-domain-ner/mlruns/1/c8c25fed508a486fb0c81e05ce32ae91/artifacts/ner_model')
+            'file:///home/sam/work/pytorch-domain-ner/mlruns/1/c8c25fed508a486fb0c81e05ce32ae91/artifacts/model')
 
         for i, data in enumerate(dataloader_train):
             break
@@ -875,7 +875,7 @@ if __name__ == "__main__":
         )
         model_utils.train(EPOCHS)
 
-        mlflow.pytorch.log_model(model_utils.model, "ner_model")
+        mlflow.pytorch.log_model(model_utils.model, "model")
 
         mlflow.log_metric("Loss-Test", model_utils.test_epoch_loss[-1])
         mlflow.log_metric("Loss-Train", model_utils.epoch_losses[-1])

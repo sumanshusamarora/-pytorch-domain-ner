@@ -1,4 +1,4 @@
-artifact_uri: file:///home/sam/work/research/pytorch-domain-ner/mlruns/1/ade07c66c9bd4f589198d72af515ee55/artifacts
+artifact_uri: file:///home/sam/work/pytorch-domain-ner/mlruns/1/ade07c66c9bd4f589198d72af515ee55/artifacts
 end_time: 1608618519480
 entry_point_name: ''
 experiment_id: '1'

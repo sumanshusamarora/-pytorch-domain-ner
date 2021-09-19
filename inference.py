@@ -52,6 +52,19 @@ def predict(model, x_padded, x_postag_padded, x_char_padded, x_enriched_features
     proba_y = [[proba.item() for proba in proba_list] for proba_list in out_proba]
 
     final_out_list = []
+    for ind_out, text in enumerate(X_text_list_as_is):
+        result = result_y[ind_out]
+        this_result_dict = {}
+        for ind_in, word in enumerate(text):
+            if result[ind_in] != "O":
+                this_result_dict[result[ind_in]] = word
+
+        final_out_list.append(this_result_dict)
+
+    return final_out_list
+
+    # TODO
+
     for j in range(len(X_text_list_as_is)):
         final_out_list.append(
             get_entities_values_joint_probas(result=result_y[j],
@@ -99,21 +112,17 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-
     experiment = mlflow.get_experiment(args.EXPERIMENT_ID)
     artifacts_uri = experiment.artifact_location
-    artifcats_location = f"{artifacts_uri}/{args.RUN_ID}/artifacts/files"
+    artifacts_location = f"{artifacts_uri}/{args.RUN_ID}/artifacts/files"
     model_location = f"{artifacts_uri}/{args.RUN_ID}/artifacts/model"
-    params_location = f"{artifacts_uri.replace('file:///', '')}/{args.RUN_ID}/params"
+    params_location = f"{artifacts_uri.replace('file://', '')}/{args.RUN_ID}/params"
 
     with open(os.path.join(params_location, 'MAX_SENTENCE_LEN'), 'r') as infile:
         max_sentence_len = ast.literal_eval(infile.read())
 
     with open(os.path.join(params_location, 'MAX_WORD_LENGTH'), 'r') as infile:
         max_word_length = ast.literal_eval(infile.read())
-
-    with open(os.path.join(params_location, 'TEST_INDEX'), 'r') as infile:
-        TEST_INDEX = ast.literal_eval(infile.read())
 
     model = mlflow.pytorch.load_model(model_location).to(device)
 
