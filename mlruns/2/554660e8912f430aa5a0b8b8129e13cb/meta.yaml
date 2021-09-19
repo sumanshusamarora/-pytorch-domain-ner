@@ -1,5 +1,5 @@
 artifact_uri: file:///home/sam/work/pytorch-domain-ner/mlruns/2/554660e8912f430aa5a0b8b8129e13cb/artifacts
-end_time: null
+end_time: 1632015654627
 entry_point_name: ''
 experiment_id: '2'
 lifecycle_stage: active
@@ -10,6 +10,6 @@ source_name: ''
 source_type: 4
 source_version: ''
 start_time: 1632013679089
-status: 1
+status: 3
 tags: []
 user_id: sam
