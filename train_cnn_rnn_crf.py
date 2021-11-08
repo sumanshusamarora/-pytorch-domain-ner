@@ -582,6 +582,7 @@ class ClassificationModelUtils:
         enrich_dim=7,
         word_embedding_weights=None,
         word_embedding_freeze=True,
+        mlflow_instance=None,
     ):
         """
 
@@ -602,6 +603,7 @@ class ClassificationModelUtils:
         :param enrich_dim:
         :param word_embedding_weights:
         :param word_embedding_freeze:
+        :param mlflow_instance: Instance of mlflow
         """
         if cuda:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -656,6 +658,7 @@ class ClassificationModelUtils:
 
         # CRF
         # self.crf_model = CRF(self.num_classes+1).to(device)
+        self.mlflow_instance = mlflow_instance
 
 
     def evaluate_classification_metrics(self, truth, prediction, type="ner", average='macro'):
@@ -810,6 +813,7 @@ class ClassificationModelUtils:
             f"Validation Recall - {self.test_epoch_ner_recall[-1]:.2f} "
             + f"Validation F1 - {self.test_epoch_ner_f1s[-1]:.2f}"
         )
+        return np.array(test_losses).mean()
 
     def train(self, num_epochs=10):
         """
@@ -911,13 +915,15 @@ class ClassificationModelUtils:
                 self.optimizer.step()
 
             self.epoch_losses.append(np.array(batch_losses).mean())
+            self.mlflow_instance.log_metric("Epoch Training Loss", np.array(batch_losses).mean())
 
             self.epoch_ner_accuracy.append(ner_accuracy)
             self.epoch_ner_precision.append(ner_precision)
             self.epoch_ner_recall.append(ner_recall)
             self.epoch_ner_f1s.append(ner_f1)
 
-            self.validate()
+            epoch_val_loss = self.validate()
+            self.mlflow_instance.log_metric("Epoch Validation Loss", epoch_val_loss)
             print(
                 classification_report(
                     self.test_epoch_truth_all, self.test_epoch_prediction_all
