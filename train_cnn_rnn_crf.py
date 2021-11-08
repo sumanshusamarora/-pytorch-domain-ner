@@ -1317,6 +1317,7 @@ if __name__ == "__main__":
             char_cnn_out_dim=args.CHAR_CNN_OUT_DIM,
             rnn_hidden_size=args.RNN_HIDDEN_SIZE,
             rnn_type=args.RNN_TYPE,
+            mlflow_instance=mlflow,
         )
         model_utils.train(args.EPOCHS)
 
