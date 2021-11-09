@@ -1,5 +1,5 @@
 artifact_uri: file:///C:/NotBackedUp/git-repos/pytorch-domain-ner/mlruns/4/40355af66bd846518504c7673c3f1dae/artifacts
-end_time: null
+end_time: 1636463421074
 entry_point_name: ''
 experiment_id: '4'
 lifecycle_stage: active
@@ -10,6 +10,6 @@ source_name: ''
 source_type: 4
 source_version: ''
 start_time: 1636463415886
-status: 1
+status: 4
 tags: []
 user_id: arorasu
