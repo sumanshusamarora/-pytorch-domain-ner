@@ -1,4 +1,4 @@
 artifact_location: file:///home/sam/work/pytorch-domain-ner/mlruns/2
 experiment_id: '2'
 lifecycle_stage: active
-name: LIQ Unstructured Forms
+name: Foxtel Demo

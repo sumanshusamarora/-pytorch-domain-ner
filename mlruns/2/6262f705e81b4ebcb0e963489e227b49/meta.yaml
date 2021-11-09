@@ -2,7 +2,7 @@ artifact_uri: file:///home/sam/work/pytorch-domain-ner/mlruns/2/6262f705e81b4ebc
 end_time: 1636341368912
 entry_point_name: ''
 experiment_id: '2'
-lifecycle_stage: active
+lifecycle_stage: deleted
 name: ''
 run_id: 6262f705e81b4ebcb0e963489e227b49
 run_uuid: 6262f705e81b4ebcb0e963489e227b49
